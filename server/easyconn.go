@@ -3,11 +3,13 @@ package server
 import (
 	"bufio"
 	"context"
-	"easymicro/log"
-	"easymicro/protocol"
 	"io"
 	"net"
 	"runtime"
+
+	"github.com/easymicro/protocol"
+
+	"github.com/easymicro/log"
 )
 
 type easyConn struct {

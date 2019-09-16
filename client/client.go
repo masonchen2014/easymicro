@@ -6,9 +6,6 @@ package client
 
 import (
 	"bufio"
-	"easymicro/log"
-	"easymicro/protocol"
-	"easymicro/share"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +14,10 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/easymicro/log"
+	"github.com/easymicro/protocol"
+	"github.com/easymicro/share"
 )
 
 const (

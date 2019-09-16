@@ -1,8 +1,8 @@
 package share
 
 import (
-	"easymicro/codec"
-	"easymicro/protocol"
+	"github.com/easymicro/codec"
+	"github.com/easymicro/protocol"
 )
 
 const (

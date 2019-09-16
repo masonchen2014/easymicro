@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"easymicro/util"
+	"github.com/easymicro/util"
 )
 
 // Compressor defines a common compression interface.

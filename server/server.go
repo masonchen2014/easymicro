@@ -2,9 +2,6 @@ package server
 
 import (
 	"context"
-	"easymicro/log"
-	"easymicro/protocol"
-	"easymicro/share"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +12,10 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/easymicro/log"
+	"github.com/easymicro/protocol"
+	"github.com/easymicro/share"
 )
 
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()

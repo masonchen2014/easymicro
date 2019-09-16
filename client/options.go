@@ -1,6 +1,6 @@
 package client
 
-import "easymicro/protocol"
+import "github.com/easymicro/protocol"
 
 //client set function
 type ClientOption func(*Client)

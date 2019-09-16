@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"easymicro/server"
+	"github.com/easymicro/server"
 )
 
 type Args struct {

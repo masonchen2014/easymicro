@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"easymicro/util"
+	"github.com/easymicro/util"
 )
 
 var (

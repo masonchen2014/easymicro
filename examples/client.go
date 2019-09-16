@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"easymicro/log"
 	"time"
 
-	"easymicro/client"
+	"github.com/easymicro/log"
+
+	"github.com/easymicro/client"
 )
 
 type Args struct {

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	"easymicro/log"
+	"github.com/easymicro/log"
 )
 
 type methodType struct {
