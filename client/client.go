@@ -6,6 +6,7 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +40,7 @@ var connected = "200 Connected to Go RPC"
 
 // Call represents an active RPC.
 type Call struct {
+	ctx           context.Context
 	ServicePath   string
 	ServiceMethod string      // The name of the service and method to call.
 	Args          interface{} // The argument to the function (*struct).
@@ -278,7 +280,7 @@ func (client *Client) Close() error {
 // the invocation. The done channel will signal when the call is complete by returning
 // the same Call object. If done is nil, Go will allocate a new channel.
 // If non-nil, done must be buffered or Go will deliberately crash.
-func (client *Client) Go(serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...CallOption) *Call {
+func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...CallOption) *Call {
 
 	call := new(Call)
 	serviceMethodStrings := strings.Split(serviceMethod, ".")
@@ -311,9 +313,13 @@ func (client *Client) Go(serviceMethod string, args interface{}, reply interface
 }
 
 // Call invokes the named function, waits for it to complete, and returns its error status.
-func (client *Client) Call(serviceMethod string, args interface{}, reply interface{}, options ...CallOption) error {
-	call := <-client.Go(serviceMethod, args, reply, make(chan *Call, 1), options...).Done
-	return call.Error
+func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...CallOption) error {
+	select {
+	case call := <-client.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
+		return call.Error
+	case <-ctx.Done():
+		return fmt.Errorf("timeout error")
+	}
 }
 
 // NewClient returns a new Client to handle requests to the
