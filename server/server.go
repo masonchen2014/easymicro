@@ -36,7 +36,10 @@ type Server struct {
 	doneChan chan struct{}
 }
 
-var DefaultServer = NewServer()
+var (
+	DefaultServer = NewServer()
+	contextType   = reflect.TypeOf((*context.Context)(nil)).Elem()
+)
 
 // NewServer returns a new Server.
 func NewServer() *Server {
@@ -116,6 +119,14 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			}
 			continue
 		}
+
+		ctxType := mtype.In(1)
+		if !ctxType.Implements(contextType) {
+			if reportErr {
+				log.Errorf("rpc.Register: context type of method %q is not implemented: %q\n", mname, ctxType)
+			}
+		}
+
 		// First arg need not be a pointer.
 		argType := mtype.In(2)
 		if !isExportedOrBuiltinType(argType) {
@@ -245,13 +256,13 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	service := server.serviceMap[serviceName]
 	server.serviceMapMu.RUnlock()
 	if service == nil {
-		err = errors.New("rpcx: can't find service " + serviceName)
+		err = errors.New("easymicro: can't find service " + serviceName)
 		return nil, err
 	}
 	mtype := service.method[methodName]
 	log.Infof("mtype is %+v", mtype)
 	if mtype == nil {
-		err = errors.New("rpcx: can't find method " + methodName)
+		err = errors.New("easymicro: can't find method " + methodName)
 		return nil, err
 	}
 

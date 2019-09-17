@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/easymicro/log"
+	"github.com/easymicro/metadata"
 	"github.com/easymicro/protocol"
 	"github.com/easymicro/share"
 )
@@ -36,6 +37,7 @@ func (e ServerError) Error() string {
 }
 
 var ErrShutdown = errors.New("connection is shut down")
+var ErrTimeOut = errors.New("request timeout")
 var connected = "200 Connected to Go RPC"
 
 // Call represents an active RPC.
@@ -51,7 +53,7 @@ type Call struct {
 	compressType  protocol.CompressType
 	serializeType protocol.SerializeType
 	seq           uint64
-	metaData      map[string]string
+	//	metaData      map[string]string
 }
 
 // Client represents an RPC Client.
@@ -95,8 +97,9 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 
 	req.SetSeq(seq)
 
-	if call.metaData != nil {
-		req.Metadata = call.metaData
+	md, b := metadata.FromMdContext(call.ctx)
+	if b {
+		req.Metadata = md
 	}
 
 	codec := share.Codecs[req.SerializeType()]
@@ -289,6 +292,7 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 	}
 	call.ServicePath = serviceMethodStrings[0]
 	call.ServiceMethod = serviceMethodStrings[1]
+	call.ctx = ctx
 	call.Args = args
 	call.Reply = reply
 	call.serializeType = protocol.JSON
@@ -318,7 +322,7 @@ func (client *Client) Call(ctx context.Context, serviceMethod string, args inter
 	case call := <-client.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
 		return call.Error
 	case <-ctx.Done():
-		return fmt.Errorf("timeout error")
+		return ErrTimeOut
 	}
 }
 

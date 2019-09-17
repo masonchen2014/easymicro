@@ -29,8 +29,8 @@ func SetCallSerializeType(sType protocol.SerializeType) CallOption {
 	}
 }
 
-func SetCallMetaData(meta map[string]string) CallOption {
+/*func SetCallMetaData(meta map[string]string) CallOption {
 	return func(call *Call) {
 		call.metaData = meta
 	}
-}
+}*/

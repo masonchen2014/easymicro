@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 
+	"github.com/easymicro/metadata"
 	"github.com/easymicro/protocol"
 
 	"github.com/easymicro/log"
@@ -81,6 +82,7 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 		}
 
 		log.Infof("readRequest req %+v", req)
+		ctx = metadata.NewClientMdContext(ctx, req.Metadata)
 		res, err := ec.server.handleRequest(ctx, req)
 		if err != nil {
 			log.Errorf("handleRequest error %v", err)
