@@ -280,7 +280,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	}
 
 	replyv := argsReplyPools.Get(mtype.ReplyType)
-
+	ctx = context.WithValue(ctx, ReplyContextKey, res)
 	if mtype.ArgType.Kind() != reflect.Ptr {
 		err = service.call(ctx, mtype, reflect.ValueOf(argv).Elem(), reflect.ValueOf(replyv))
 	} else {
@@ -354,4 +354,14 @@ func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 // It is still necessary to invoke http.Serve(), typically in a go statement.
 func HandleHTTP() {
 	DefaultServer.HandleHTTP(DefaultRPCPath, DefaultDebugPath)
+}
+
+func SendMetaData(ctx context.Context, md map[string]string) error {
+	replyMessage, ok := ctx.Value(ReplyContextKey).(*protocol.Message)
+	if !ok {
+		return errors.New("failed to fetch reply message from context")
+	}
+
+	replyMessage.Metadata = md
+	return nil
 }

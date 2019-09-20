@@ -25,6 +25,9 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 		log.Infof("get md %+v from context", md)
 	}
 	reply.C = args.A * args.B
+	server.SendMetaData(ctx, map[string]string{
+		"server": "hi this is server md",
+	})
 	return nil
 }
 

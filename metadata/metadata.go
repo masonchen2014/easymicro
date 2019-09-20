@@ -7,6 +7,7 @@ import (
 
 type mdClientKey struct{}
 type mdServersKey struct{}
+type replyMessageKey struct{}
 
 func New(m map[string]string) map[string]string {
 	md := map[string]string{}
@@ -17,23 +18,23 @@ func New(m map[string]string) map[string]string {
 	return md
 }
 
-// NewIncomingContext creates a new context with incoming md attached.
+// NewClientMdContext creates a new context with client md attached.
 func NewClientMdContext(ctx context.Context, md map[string]string) context.Context {
 	return context.WithValue(ctx, mdClientKey{}, md)
 }
 
-// FromIncomingContext get incoming md from incoming context.
+// FromClientMdContext get  md from client context.
 func FromClientMdContext(ctx context.Context) (md map[string]string, ok bool) {
 	md, ok = ctx.Value(mdClientKey{}).(map[string]string)
 	return
 }
 
-// NewIncomingContext creates a new context with incoming md attached.
+// NewServerMdContext get  md from client context.
 func NewServerMdContext(ctx context.Context, md map[string]string) context.Context {
 	return context.WithValue(ctx, mdServersKey{}, md)
 }
 
-// FromIncomingContext get incoming md from incoming context.
+// FromServerMdContext get incoming md from server context.
 func FromServerMdContext(ctx context.Context) (md map[string]string, ok bool) {
 	md, ok = ctx.Value(mdServersKey{}).(map[string]string)
 	return

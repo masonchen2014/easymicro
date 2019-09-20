@@ -49,11 +49,13 @@ type Call struct {
 	Reply         interface{} // The reply from the function (*struct).
 	Error         error       // After completion, the error status.
 	Done          chan *Call  // Strobes when call is complete.
+	Metadata      map[string]string
 	heartBeat     bool
 	compressType  protocol.CompressType
 	serializeType protocol.SerializeType
 	seq           uint64
-	//	metaData      map[string]string
+	BeforeCalls   []CallOption
+	AfterCalls    []CallOption
 }
 
 // Client represents an RPC Client.
@@ -97,7 +99,7 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 
 	req.SetSeq(seq)
 
-	md, b := metadata.FromMdContext(call.ctx)
+	md, b := metadata.FromClientMdContext(call.ctx)
 	if b {
 		req.Metadata = md
 	}
@@ -188,6 +190,12 @@ func (client *Client) input() {
 			err = codec.Decode(resp.Payload, call.Reply)
 			if err != nil {
 				break
+			}
+			if resp.Metadata != nil {
+				call.Metadata = resp.Metadata
+			}
+			for _, afterCall := range call.AfterCalls {
+				afterCall(call)
 			}
 			call.done()
 		}
@@ -283,7 +291,7 @@ func (client *Client) Close() error {
 // the invocation. The done channel will signal when the call is complete by returning
 // the same Call object. If done is nil, Go will allocate a new channel.
 // If non-nil, done must be buffered or Go will deliberately crash.
-func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...CallOption) *Call {
+func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...BeforeOrAfterCallOption) *Call {
 
 	call := new(Call)
 	serviceMethodStrings := strings.Split(serviceMethod, ".")
@@ -297,7 +305,11 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 	call.Reply = reply
 	call.serializeType = protocol.JSON
 	for _, opt := range options {
-		opt(call)
+		if opt.after {
+			call.AfterCalls = append(call.AfterCalls, opt.option)
+		} else {
+			opt.option(call)
+		}
 	}
 
 	if done == nil {
@@ -317,7 +329,7 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 }
 
 // Call invokes the named function, waits for it to complete, and returns its error status.
-func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...CallOption) error {
+func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
 	select {
 	case call := <-client.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
 		return call.Error

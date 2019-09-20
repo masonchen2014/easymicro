@@ -83,6 +83,7 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 
 		log.Infof("readRequest req %+v", req)
 		ctx = metadata.NewClientMdContext(ctx, req.Metadata)
+		//	ctx = context.WithValue(ctx, req)
 		res, err := ec.server.handleRequest(ctx, req)
 		if err != nil {
 			log.Errorf("handleRequest error %v", err)
