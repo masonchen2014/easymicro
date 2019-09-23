@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	"time"
 
 	"github.com/easymicro/metadata"
 	"github.com/easymicro/protocol"
@@ -15,6 +16,8 @@ import (
 
 type easyConn struct {
 	server *Server
+
+	maxIdleTime int64
 
 	// rwc is the underlying network connection.
 	rwc net.Conn
@@ -26,8 +29,9 @@ type easyConn struct {
 //TODO可以传入ctx进来
 func newEasyConn(s *Server, c net.Conn) *easyConn {
 	return &easyConn{
-		server: s,
-		rwc:    c,
+		server:      s,
+		rwc:         c,
+		maxIdleTime: s.maxConnIdleTime,
 	}
 }
 
@@ -66,6 +70,7 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 		/*	s.mu.Lock()
 			delete(s.activeConn, conn)
 			s.mu.Unlock()*/
+
 		ec.rwc.Close()
 
 	}()
@@ -73,6 +78,7 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 	r := bufio.NewReaderSize(ec.rwc, 1024)
 
 	for {
+		ec.rwc.SetReadDeadline(time.Now().Add(time.Duration(ec.maxIdleTime) * time.Second))
 		req, err := ec.readRequest(r)
 		if err != nil {
 			if err != io.EOF {
@@ -81,7 +87,15 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 			return
 		}
 
+		if req.IsHeartbeat() {
+			log.Infof("server receives heartbeat at time %d", time.Now().Unix())
+			req.SetMessageType(protocol.Response)
+			ec.writeResponse(req)
+			protocol.FreeMsg(req)
+			return
+		}
 		log.Infof("readRequest req %+v", req)
+
 		ctx = metadata.NewClientMdContext(ctx, req.Metadata)
 		//	ctx = context.WithValue(ctx, req)
 		res, err := ec.server.handleRequest(ctx, req)

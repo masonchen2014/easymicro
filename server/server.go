@@ -28,12 +28,12 @@ const (
 )
 
 type Server struct {
-	ln           net.Listener
-	serviceMapMu sync.RWMutex
-	serviceMap   map[string]*service
-
-	mu       sync.RWMutex
-	doneChan chan struct{}
+	ln              net.Listener
+	serviceMapMu    sync.RWMutex
+	serviceMap      map[string]*service
+	maxConnIdleTime int64
+	mu              sync.RWMutex
+	doneChan        chan struct{}
 }
 
 var (
@@ -43,7 +43,9 @@ var (
 
 // NewServer returns a new Server.
 func NewServer() *Server {
-	return &Server{}
+	return &Server{
+		maxConnIdleTime: 10,
+	}
 }
 
 //Register a service

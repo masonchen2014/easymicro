@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/easymicro/log"
 	"github.com/easymicro/metadata"
@@ -24,8 +25,9 @@ import (
 
 const (
 	// Defaults used by HandleHTTP
-	DefaultRPCPath   = "/_goRPC_"
-	DefaultDebugPath = "/debug/rpc"
+	DefaultRPCPath      = "/_goRPC_"
+	DefaultDebugPath    = "/debug/rpc"
+	defHeatBeatInterval = 5
 )
 
 // ServerError represents an error that has been returned from
@@ -67,12 +69,15 @@ type Client struct {
 	conn net.Conn
 	//reqMutex sync.Mutex // protects following
 	//request  Request
+	heartBeatInterval int64
 
 	mutex    sync.Mutex // protects following
 	seq      uint64
 	pending  map[uint64]*Call
+	lastSend int64
 	closing  bool // user has called Close
 	shutdown bool // server has told us to stop
+	doneChan chan struct{}
 }
 
 //create request message from call param
@@ -93,10 +98,6 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 		req.SetCompressType(protocol.Gzip)
 	}
 
-	if call.serializeType != protocol.SerializeNone {
-		req.SetSerializeType(call.serializeType)
-	}
-
 	req.SetSeq(seq)
 
 	md, b := metadata.FromClientMdContext(call.ctx)
@@ -104,17 +105,32 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 		req.Metadata = md
 	}
 
-	codec := share.Codecs[req.SerializeType()]
-	if codec == nil {
-		err := fmt.Errorf("can not find codec for %d", req.SerializeType())
-		return nil, err
+	if call.serializeType != protocol.SerializeNone {
+		req.SetSerializeType(call.serializeType)
+		codec := share.Codecs[req.SerializeType()]
+		if codec == nil {
+			err := fmt.Errorf("can not find codec for %d", req.SerializeType())
+			return nil, err
+		}
+		data, err := codec.Encode(call.Args)
+		if err != nil {
+			return nil, fmt.Errorf("encode ")
+		}
+		req.Payload = data
 	}
-	data, err := codec.Encode(call.Args)
-	if err != nil {
-		return nil, fmt.Errorf("encode ")
-	}
-	req.Payload = data
+
 	return req, nil
+}
+
+func (client *Client) sendHeartBeat() {
+	call := new(Call)
+	call.ctx = context.Background()
+	call.Args = nil
+	call.Reply = nil
+	call.serializeType = protocol.SerializeNone
+	call.Done = make(chan *Call)
+	call.heartBeat = true
+	client.send(call)
 }
 
 func (client *Client) send(call *Call) {
@@ -130,6 +146,7 @@ func (client *Client) send(call *Call) {
 
 	seq := atomic.AddUint64(&client.seq, 1)
 	client.pending[seq] = call
+	client.lastSend = time.Now().Unix()
 	client.mutex.Unlock()
 
 	req, err := client.createRequest(call, seq)
@@ -165,6 +182,32 @@ func (client *Client) readResponse(resp *protocol.Message) (*protocol.Message, e
 	return resp, err
 }
 
+func (client *Client) keepalive() {
+	timer := time.NewTimer(time.Duration(client.heartBeatInterval) * time.Second)
+	for {
+		select {
+		case <-timer.C:
+			//examine lastSend
+			nextKaInterval := client.heartBeatInterval
+			client.mutex.Lock()
+			lastSend := client.lastSend
+			client.mutex.Unlock()
+
+			now := time.Now().Unix()
+			if now-lastSend < client.heartBeatInterval {
+				nextKaInterval = lastSend + client.heartBeatInterval - now
+			} else {
+				//here send heart beat
+				client.sendHeartBeat()
+			}
+			timer.Reset(time.Duration(nextKaInterval) * time.Second)
+		case <-client.getDoneChan():
+			log.Infof("client keepalive goroutine exit")
+			break
+		}
+	}
+}
+
 func (client *Client) input() {
 	var err error
 	resp := protocol.NewMessage()
@@ -180,6 +223,11 @@ func (client *Client) input() {
 		call := client.pending[seq]
 		delete(client.pending, seq)
 		client.mutex.Unlock()
+
+		if resp.IsHeartbeat() {
+			call.done()
+			continue
+		}
 
 		if call != nil {
 			codec := share.Codecs[resp.SerializeType()]
@@ -287,12 +335,21 @@ func (client *Client) Close() error {
 	return client.conn.Close()
 }
 
+func (client *Client) getDoneChan() <-chan struct{} {
+	client.mutex.Lock()
+	defer client.mutex.Unlock()
+
+	if client.doneChan == nil {
+		client.doneChan = make(chan struct{})
+	}
+	return client.doneChan
+}
+
 // Go invokes the function asynchronously. It returns the Call structure representing
 // the invocation. The done channel will signal when the call is complete by returning
 // the same Call object. If done is nil, Go will allocate a new channel.
 // If non-nil, done must be buffered or Go will deliberately crash.
 func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...BeforeOrAfterCallOption) *Call {
-
 	call := new(Call)
 	serviceMethodStrings := strings.Split(serviceMethod, ".")
 	if len(serviceMethodStrings) < 2 {
@@ -365,13 +422,16 @@ func NewClient(network, address string, opts ...ClientOption) (*Client, error) {
 	}
 
 	client := &Client{
-		conn:    conn,
-		pending: make(map[uint64]*Call),
+		conn:              conn,
+		pending:           make(map[uint64]*Call),
+		heartBeatInterval: defHeatBeatInterval,
+		doneChan:          make(chan struct{}),
 	}
 
 	for _, opt := range opts {
 		opt(client)
 	}
 	go client.input()
+	go client.keepalive()
 	return client, nil
 }
