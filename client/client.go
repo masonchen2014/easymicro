@@ -123,12 +123,13 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 }
 
 func (client *Client) sendHeartBeat() {
+	log.Infof("sendHeartBeat at time %d", time.Now().Unix())
 	call := new(Call)
 	call.ctx = context.Background()
 	call.Args = nil
 	call.Reply = nil
 	call.serializeType = protocol.SerializeNone
-	call.Done = make(chan *Call)
+	call.Done = make(chan *Call, 1)
 	call.heartBeat = true
 	client.send(call)
 }

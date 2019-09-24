@@ -92,7 +92,7 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 			req.SetMessageType(protocol.Response)
 			ec.writeResponse(req)
 			protocol.FreeMsg(req)
-			return
+			continue
 		}
 		log.Infof("readRequest req %+v", req)
 
