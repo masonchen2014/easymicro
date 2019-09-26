@@ -38,7 +38,7 @@ func (e ServerError) Error() string {
 	return string(e)
 }
 
-var ErrShutdown = errors.New("connection is shut down")
+var ErrShutdown = errors.New("connection is shutdown")
 var ErrTimeOut = errors.New("request timeout")
 var connected = "200 Connected to Go RPC"
 
@@ -65,18 +65,25 @@ type Call struct {
 // with a single Client, and a Client may be used by
 // multiple goroutines simultaneously.
 type Client struct {
+	network string
+	address string
+
+	reconnectTryNums int64
 	//	codec ClientCodec
 	conn net.Conn
 	//reqMutex sync.Mutex // protects following
 	//request  Request
+	heartBeatTryNums  int64
+	heartBeatTimeout  int64
 	heartBeatInterval int64
 
 	mutex    sync.Mutex // protects following
 	seq      uint64
 	pending  map[uint64]*Call
 	lastSend int64
-	closing  bool // user has called Close
-	shutdown bool // server has told us to stop
+	closed   bool
+	closing  bool
+	//shutdown bool // server has told us to stop
 	doneChan chan struct{}
 }
 
@@ -122,23 +129,75 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 	return req, nil
 }
 
-func (client *Client) sendHeartBeat() {
-	log.Infof("sendHeartBeat at time %d", time.Now().Unix())
-	call := new(Call)
-	call.ctx = context.Background()
-	call.Args = nil
-	call.Reply = nil
-	call.serializeType = protocol.SerializeNone
-	call.Done = make(chan *Call, 1)
-	call.heartBeat = true
-	client.send(call)
+func (client *Client) sendHeartBeat() error {
+	tempDelay := 1
+	var err error
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	for i := 0; i < 3; i++ {
+		log.Infof("client sendHeartBeat for %d time at time %d", i+1, time.Now().Unix())
+		err = client.Call(ctx, "", nil, nil, SetCallSerializeType(protocol.SerializeNone), SetCallHeartBeat())
+		if err == nil {
+			return nil
+		} else if err == ErrTimeOut {
+			continue
+		} else {
+			time.Sleep(time.Duration(tempDelay) * time.Second)
+			tempDelay = 2 * tempDelay
+		}
+	}
+	return err
+}
+
+func (client *Client) reconnect() error {
+	client.mutex.Lock()
+	if client.closed {
+		//do nothing
+		client.mutex.Unlock()
+		return ErrShutdown
+	}
+	client.closing = true
+	client.mutex.Unlock()
+
+	var conn net.Conn
+	var err error
+	tempDelay := 1
+	for i := 0; i < 10; i++ {
+		log.Infof("client reconnect for %d time at time %d", i+1, time.Now().Unix())
+		if client.network == "tcp" {
+			conn, err = Dial(client.network, client.address)
+		} else if client.network == "http" {
+			conn, err = DialHTTP(client.network, client.address)
+		}
+		if err != nil {
+			log.Errorf("client reconnect error %+v", err)
+			if i < 9 {
+				time.Sleep(time.Duration(tempDelay) * time.Second)
+			}
+			tempDelay = 2 * tempDelay
+			continue
+		} else {
+			break
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	client.mutex.Lock()
+	client.conn = conn
+	client.closing = false
+	client.closed = false
+	client.mutex.Unlock()
+	log.Infof("client reconnect success")
+	return nil
 }
 
 func (client *Client) send(call *Call) {
 
 	// Register this call.
 	client.mutex.Lock()
-	if client.shutdown || client.closing {
+	if client.closed || client.closing {
 		client.mutex.Unlock()
 		call.Error = ErrShutdown
 		call.done()
@@ -148,6 +207,7 @@ func (client *Client) send(call *Call) {
 	seq := atomic.AddUint64(&client.seq, 1)
 	client.pending[seq] = call
 	client.lastSend = time.Now().Unix()
+	rawConn := client.conn
 	client.mutex.Unlock()
 
 	req, err := client.createRequest(call, seq)
@@ -163,7 +223,7 @@ func (client *Client) send(call *Call) {
 		return
 	}
 
-	_, err = client.conn.Write(req.Encode())
+	_, err = rawConn.Write(req.Encode())
 	if err != nil {
 		client.mutex.Lock()
 		call = client.pending[seq]
@@ -191,6 +251,11 @@ func (client *Client) keepalive() {
 			//examine lastSend
 			nextKaInterval := client.heartBeatInterval
 			client.mutex.Lock()
+			if client.closed || client.closing {
+				client.mutex.Unlock()
+				timer.Reset(time.Duration(nextKaInterval) * time.Second)
+				continue
+			}
 			lastSend := client.lastSend
 			client.mutex.Unlock()
 
@@ -199,24 +264,55 @@ func (client *Client) keepalive() {
 				nextKaInterval = lastSend + client.heartBeatInterval - now
 			} else {
 				//here send heart beat
-				client.sendHeartBeat()
+				if err := client.sendHeartBeat(); err != nil {
+					client.mutex.Lock()
+					if !client.closed && !client.closing {
+						client.closing = true
+						client.conn.Close()
+					}
+					client.mutex.Unlock()
+				}
 			}
 			timer.Reset(time.Duration(nextKaInterval) * time.Second)
 		case <-client.getDoneChan():
 			log.Infof("client keepalive goroutine exit")
-			break
+			return
 		}
 	}
+}
+
+func (client *Client) Close() {
+	client.close(ErrShutdown)
+}
+
+func (client *Client) close(err error) {
+	// Terminate pending calls.
+	client.mutex.Lock()
+	if !client.closed {
+		client.closed = true
+		for _, call := range client.pending {
+			call.Error = err
+			call.done()
+		}
+		client.conn.Close()
+		close(client.doneChan)
+	}
+	client.mutex.Unlock()
 }
 
 func (client *Client) input() {
 	var err error
 	resp := protocol.NewMessage()
+
 	for err == nil {
 		_, err = client.readResponse(resp)
 		if err != nil {
-			log.Errorf("input exit for err %v", err)
-			break
+			err = client.reconnect()
+			if err != nil {
+				break
+			} else {
+				continue
+			}
 		}
 
 		seq := resp.Seq()
@@ -250,22 +346,8 @@ func (client *Client) input() {
 		}
 	}
 
-	// Terminate pending calls.
-	client.mutex.Lock()
-	client.shutdown = true
-	closing := client.closing
-	if err == io.EOF {
-		if closing {
-			err = ErrShutdown
-		} else {
-			err = io.ErrUnexpectedEOF
-		}
-	}
-	for _, call := range client.pending {
-		call.Error = err
-		call.done()
-	}
-	client.mutex.Unlock()
+	client.close(err)
+	log.Infof("client input goroutine exit")
 }
 
 func (call *Call) done() {
@@ -290,7 +372,7 @@ func DialHTTP(network, address string) (net.Conn, error) {
 // at the specified network address and path.
 func DialHTTPPath(network, address, path string) (net.Conn, error) {
 	var err error
-	conn, err := net.Dial(network, address)
+	conn, err := net.DialTimeout(network, address, 3*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -316,24 +398,11 @@ func DialHTTPPath(network, address, path string) (net.Conn, error) {
 
 // Dial connects to an RPC server at the specified network address.
 func Dial(network, address string) (net.Conn, error) {
-	conn, err := net.Dial(network, address)
+	conn, err := net.DialTimeout(network, address, 3*time.Second)
 	if err != nil {
 		return nil, err
 	}
 	return conn, nil
-}
-
-// Close calls the underlying codec's Close method. If the connection is already
-// shutting down, ErrShutdown is returned.
-func (client *Client) Close() error {
-	client.mutex.Lock()
-	if client.closing {
-		client.mutex.Unlock()
-		return ErrShutdown
-	}
-	client.closing = true
-	client.mutex.Unlock()
-	return client.conn.Close()
 }
 
 func (client *Client) getDoneChan() <-chan struct{} {
@@ -352,12 +421,14 @@ func (client *Client) getDoneChan() <-chan struct{} {
 // If non-nil, done must be buffered or Go will deliberately crash.
 func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...BeforeOrAfterCallOption) *Call {
 	call := new(Call)
-	serviceMethodStrings := strings.Split(serviceMethod, ".")
-	if len(serviceMethodStrings) < 2 {
-		log.Fatal("invalid service path")
+	if serviceMethod != "" {
+		serviceMethodStrings := strings.Split(serviceMethod, ".")
+		if len(serviceMethodStrings) < 2 {
+			log.Fatal("invalid service path")
+		}
+		call.ServicePath = serviceMethodStrings[0]
+		call.ServiceMethod = serviceMethodStrings[1]
 	}
-	call.ServicePath = serviceMethodStrings[0]
-	call.ServiceMethod = serviceMethodStrings[1]
 	call.ctx = ctx
 	call.Args = args
 	call.Reply = reply
@@ -423,6 +494,8 @@ func NewClient(network, address string, opts ...ClientOption) (*Client, error) {
 	}
 
 	client := &Client{
+		network:           network,
+		address:           address,
 		conn:              conn,
 		pending:           make(map[uint64]*Call),
 		heartBeatInterval: defHeatBeatInterval,
