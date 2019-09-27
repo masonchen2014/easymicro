@@ -68,13 +68,13 @@ type Client struct {
 	network string
 	address string
 
-	reconnectTryNums int64
+	reconnectTryNums int
 	//	codec ClientCodec
 	conn net.Conn
 	//reqMutex sync.Mutex // protects following
 	//request  Request
-	heartBeatTryNums  int64
-	heartBeatTimeout  int64
+	heartBeatTryNums  int
+	heartBeatTimeout  int
 	heartBeatInterval int64
 
 	mutex    sync.Mutex // protects following
@@ -132,8 +132,17 @@ func (client *Client) createRequest(call *Call, seq uint64) (*protocol.Message, 
 func (client *Client) sendHeartBeat() error {
 	tempDelay := 1
 	var err error
-	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
-	for i := 0; i < 3; i++ {
+	timeout := client.heartBeatTimeout
+	if timeout <= 0 {
+		timeout = 2
+	}
+
+	tryNums := client.heartBeatTryNums
+	if tryNums <= 0 {
+		tryNums = 3
+	}
+	ctx, _ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	for i := 0; i < tryNums; i++ {
 		log.Infof("client sendHeartBeat for %d time at time %d", i+1, time.Now().Unix())
 		err = client.Call(ctx, "", nil, nil, SetCallSerializeType(protocol.SerializeNone), SetCallHeartBeat())
 		if err == nil {
@@ -158,11 +167,16 @@ func (client *Client) reconnect() error {
 	client.closing = true
 	client.mutex.Unlock()
 
+	reconnectTryNums := int(client.reconnectTryNums)
+	if reconnectTryNums <= 0 {
+		reconnectTryNums = 6
+	}
+
 	var conn net.Conn
 	var err error
 	tempDelay := 1
-	for i := 0; i < 10; i++ {
-		log.Infof("client reconnect for %d time at time %d", i+1, time.Now().Unix())
+	for i := 1; i <= reconnectTryNums; i++ {
+		log.Infof("client reconnect for %d time at time %d", i, time.Now().Unix())
 		if client.network == "tcp" {
 			conn, err = Dial(client.network, client.address)
 		} else if client.network == "http" {
@@ -170,7 +184,7 @@ func (client *Client) reconnect() error {
 		}
 		if err != nil {
 			log.Errorf("client reconnect error %+v", err)
-			if i < 9 {
+			if i < reconnectTryNums {
 				time.Sleep(time.Duration(tempDelay) * time.Second)
 			}
 			tempDelay = 2 * tempDelay
