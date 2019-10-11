@@ -23,6 +23,8 @@ const (
 	OpencensusSpanClientKey = "opencensus_span_client_key"
 	// OpencensusSpanRequestKey span key in request meta
 	OpencensusSpanRequestKey = "opencensus_span_request_key"
+
+	BaseServicesPath = "services/"
 )
 
 var (

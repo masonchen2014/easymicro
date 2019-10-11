@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/easymicro/discovery"
 	"github.com/easymicro/log"
 	"github.com/easymicro/protocol"
 	"github.com/easymicro/share"
@@ -28,12 +29,15 @@ const (
 )
 
 type Server struct {
-	ln              net.Listener
-	serviceMapMu    sync.RWMutex
-	serviceMap      map[string]*service
-	maxConnIdleTime int64
-	mu              sync.RWMutex
-	doneChan        chan struct{}
+	ln                 net.Listener
+	serviceMapMu       sync.RWMutex
+	serviceMap         map[string]*service
+	maxConnIdleTime    int64
+	mu                 sync.RWMutex
+	doneChan           chan struct{}
+	discovery          discovery.Discovery
+	name               string
+	advertiseClientUrl string
 }
 
 var (
@@ -42,10 +46,21 @@ var (
 )
 
 // NewServer returns a new Server.
-func NewServer() *Server {
-	return &Server{
+func NewServer(opts ...ServerOption) *Server {
+	s := &Server{
 		maxConnIdleTime: 10,
 	}
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			log.Panicf("NewServer failed for error %v", err)
+		}
+	}
+
+	return s
+}
+
+func (server *Server) SetAdvertiseClientUrl(url string) {
+	server.advertiseClientUrl = url
 }
 
 //Register a service
@@ -69,8 +84,10 @@ func (server *Server) register(rcvr interface{}, name string, useName bool) erro
 	s.typ = reflect.TypeOf(rcvr)
 	s.rcvr = reflect.ValueOf(rcvr)
 	sname := reflect.Indirect(s.rcvr).Type().Name()
+	server.name = sname
 	if useName {
 		sname = name
+		server.name = name
 	}
 	if sname == "" {
 		s := "rpc.Register: no service name for type " + s.typ.String()
@@ -196,6 +213,17 @@ func (server *Server) Serve(network, address string) {
 	//rpc over http
 	if network == "http" {
 
+	}
+
+	if server.discovery != nil {
+		if server.name == "" || server.advertiseClientUrl == "" {
+			log.Fatal("no server name or advertise client url to register ")
+		}
+		//register discovery
+		go server.discovery.Register(&discovery.ServiceInfo{
+			Name: server.name,
+			Addr: server.advertiseClientUrl,
+		})
 	}
 	server.serve(ln)
 }
