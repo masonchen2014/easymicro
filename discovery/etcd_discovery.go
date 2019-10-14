@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/easymicro/log"
@@ -97,8 +98,9 @@ func (s *EtcdDiscovery) revoke() error {
 
 type EtcdDiscoveryMaster struct {
 	Path   string
-	Nodes  map[string]*Node
 	Client *clientv3.Client
+	mutex  sync.RWMutex
+	Nodes  map[string]*Node
 }
 
 //node is a client
@@ -123,7 +125,7 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) (*EtcdDiscover
 		Client: cli,
 	}
 
-	if err := master.GetAllNodes(); err != nil {
+	if err := master.FetchAllNodesInfo(); err != nil {
 		log.Errorf("NewEtcdDiscoveryMaster GetAllNodes failed %v", err)
 		return nil, err
 	}
@@ -132,7 +134,17 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) (*EtcdDiscover
 	return master, err
 }
 
-func (m *EtcdDiscoveryMaster) GetAllNodes() error {
+func (m *EtcdDiscoveryMaster) GetAllNodes() []string {
+	addrs := []string{}
+	m.mutex.RLock()
+	for _, node := range m.Nodes {
+		addrs = append(addrs, node.Info.Addr)
+	}
+	m.mutex.RUnlock()
+	return addrs
+}
+
+func (m *EtcdDiscoveryMaster) FetchAllNodesInfo() error {
 	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 	resp, err := m.Client.Get(ctx, m.Path, clientv3.WithPrefix())
 	if err != nil {
@@ -157,7 +169,15 @@ func (m *EtcdDiscoveryMaster) AddNode(key string, info *ServiceInfo) {
 		Info: info,
 	}
 
+	m.mutex.Lock()
 	m.Nodes[node.Key] = node
+	m.mutex.Unlock()
+}
+
+func (m *EtcdDiscoveryMaster) DelNode(key string) {
+	m.mutex.Lock()
+	delete(m.Nodes, string(key))
+	m.mutex.Unlock()
 }
 
 func ValueToServiceInfo(value []byte) (*ServiceInfo, error) {
@@ -184,7 +204,7 @@ func (m *EtcdDiscoveryMaster) WatchNodes() {
 				m.AddNode(string(ev.Kv.Key), info)
 			case clientv3.EventTypeDelete:
 				log.Infof("[%s] %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
-				delete(m.Nodes, string(ev.Kv.Key))
+				m.DelNode(string(ev.Kv.Key))
 			}
 		}
 	}
