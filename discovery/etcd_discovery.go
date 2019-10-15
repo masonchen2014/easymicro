@@ -190,6 +190,7 @@ func ValueToServiceInfo(value []byte) (*ServiceInfo, error) {
 }
 
 func (m *EtcdDiscoveryMaster) WatchNodes() {
+	//TODO 重试机制
 	rch := m.Client.Watch(context.Background(), m.Path, clientv3.WithPrefix())
 	for wresp := range rch {
 		for _, ev := range wresp.Events {

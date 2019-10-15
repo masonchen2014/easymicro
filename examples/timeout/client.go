@@ -27,7 +27,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 
 func main() {
 	// #1
-	client, err := client.NewClient("tcp", ":8972")
+	client, err := client.NewClient("tcp", ":8972", "Arith")
 	if err != nil {
 		log.Panic(err)
 		return
@@ -45,7 +45,8 @@ func main() {
 
 	// #5
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	err = client.Call(ctx, "Arith.Mul", args, reply)
+	log.Infof("client call at time %d", time.Now().Unix())
+	err = client.Call(ctx, "Mul", args, reply)
 	if err != nil {
 		//log.Fatalf("failed to call: %v", err)
 		log.Error(err)
@@ -62,7 +63,7 @@ func main() {
 		A: 25,
 		B: 15,
 	}
-	client.Call(context.Background(), "Arith.Mul", args, reply)
+	client.Call(context.Background(), "Mul", args, reply)
 	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
 
 	time.Sleep(20 * time.Second)

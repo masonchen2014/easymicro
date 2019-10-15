@@ -22,7 +22,7 @@ type Arith int
 
 func main() {
 	// #1
-	client, err := easyclient.NewClient("tcp", "172.16.164.248:8972")
+	client, err := easyclient.NewClient("tcp", "127.0.0.1:8972", "Arith")
 	if err != nil {
 		log.Error(err)
 		return
@@ -41,7 +41,7 @@ func main() {
 	// #5
 	for i := 0; i < 5; i++ {
 		log.Infof("client call at time %d", time.Now().Unix())
-		err = client.Call(context.Background(), "Arith.Mul", args, reply)
+		err = client.Call(context.Background(), "Mul", args, reply)
 		if err != nil {
 			log.Error(err)
 		}
@@ -49,19 +49,6 @@ func main() {
 
 		time.Sleep(2 * time.Second)
 	}
-
-	//time.Sleep(10 * time.Second)
-
-	/*for i := 0; i < 5; i++ {
-		log.Infof("client call at time %d", time.Now().Unix())
-		err = client.Call(context.Background(), "Arith.Mul", args, reply)
-		if err != nil {
-			log.Error(err)
-		}
-		log.Infof("%d * %d = %d", args.A, args.B, reply.C)
-
-		time.Sleep(2 * time.Second)
-	}*/ //
 
 	time.Sleep(700 * time.Second)
 }

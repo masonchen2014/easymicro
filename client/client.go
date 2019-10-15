@@ -2,10 +2,10 @@ package client
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	"github.com/easymicro/discovery"
+	"github.com/easymicro/log"
 	"github.com/easymicro/protocol"
 )
 
@@ -71,37 +71,28 @@ type Client struct {
 }
 
 func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
-	if client.selectMode == SelectByUser {
-		return client.defaultRPCClient.Call(ctx, serviceMethod, args, reply, options...)
-	}
-	nodes := client.discovery.GetAllNodes()
-	selectedNode := ""
-	switch client.selectMode {
-	case RandomSelect:
-		selectedNode = nodes[0]
-		//TODO
-	case RoundRobin:
-		//TODO
-	}
-	client.mu.RLock()
-	rpcClient := client.cachedClient[selectedNode]
-	client.mu.RUnlock()
-	if rpcClient == nil {
-		rCli, err := NewRPCClient("tcp", selectedNode, client.servicePath)
-		if err != nil {
-			return nil
-		}
-		rpcClient = rCli
-		client.mu.Lock()
-		client.cachedClient[selectedNode] = rpcClient
-		client.mu.Unlock()
+	rpcClient, err := client.selectRPCClient()
+	if err != nil {
+		log.Errorf("select rpc client failed for err %v", err)
+		return nil
 	}
 	return rpcClient.Call(ctx, serviceMethod, args, reply, options...)
 }
 
 func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...BeforeOrAfterCallOption) *Call {
+	rpcClient, err := client.selectRPCClient()
+	if err != nil {
+		log.Errorf("select rpc client failed for err %v", err)
+		return nil
+	}
+	return rpcClient.Go(ctx, serviceMethod, args, reply, done, options...)
+}
+
+func (client *Client) selectRPCClient() (*RPCClient, error) {
+	var rpcClient *RPCClient
 	if client.selectMode == SelectByUser {
-		return client.defaultRPCClient.Go(ctx, serviceMethod, args, reply, done, options...)
+		rpcClient = client.defaultRPCClient
+		return rpcClient, nil
 	}
 	nodes := client.discovery.GetAllNodes()
 	selectedNode := ""
@@ -114,17 +105,27 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 		//TODO
 	}
 	client.mu.RLock()
-	rpcClient := client.cachedClient[selectedNode]
+	rpcClient = client.cachedClient[selectedNode]
 	client.mu.RUnlock()
 	if rpcClient == nil {
 		rCli, err := NewRPCClient("tcp", selectedNode, client.servicePath)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		rpcClient = rCli
 		client.mu.Lock()
 		client.cachedClient[selectedNode] = rpcClient
 		client.mu.Unlock()
 	}
-	return rpcClient.Go(ctx, serviceMethod, args, reply, done, options...)
+	return rpcClient, nil
+}
+
+func (client *Client) Close() {
+	if client.defaultRPCClient != nil {
+		client.defaultRPCClient.Close()
+	}
+
+	for _, rCli := range client.cachedClient {
+		rCli.Close()
+	}
 }

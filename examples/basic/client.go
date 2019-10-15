@@ -27,12 +27,11 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 
 func main() {
 	// #1
-	client, err := client.NewClient("tcp", ":8972")
+	client, err := client.NewClient("tcp", ":8972", "Arith")
 	if err != nil {
 		log.Panic(err)
 		return
 	}
-	defer client.Close()
 
 	// #3
 	args := &Args{
@@ -47,8 +46,9 @@ func main() {
 		A: 25,
 		B: 15,
 	}
-	client.Call(context.Background(), "Arith.Mul", args, reply)
+	client.Call(context.Background(), "Mul", args, reply)
 	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+	client.Close()
 
 	time.Sleep(20 * time.Second)
 }

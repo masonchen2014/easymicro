@@ -23,7 +23,7 @@ type Arith int
 
 func main() {
 	// #1
-	client, err := easyclient.NewClient("tcp", ":8972")
+	client, err := easyclient.NewClient("tcp", ":8972", "Arith")
 	if err != nil {
 		log.Panic(err)
 		return
@@ -46,7 +46,7 @@ func main() {
 	})
 
 	mdFromServer := map[string]string{}
-	err = client.Call(ctx, "Arith.Mul", args, reply, easyclient.GetMetadataFromServer(&mdFromServer))
+	err = client.Call(ctx, "Mul", args, reply, easyclient.GetMetadataFromServer(&mdFromServer))
 	if err != nil {
 		log.Error(err)
 	}
