@@ -63,8 +63,10 @@ func main() {
 		A: 25,
 		B: 15,
 	}
-	client.Call(context.Background(), "Mul", args, reply)
-	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+	for i := 1; i <= 50; i++ {
+		client.Call(context.Background(), "Mul", args, reply)
+		log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+	}
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(30 * time.Second)
 }

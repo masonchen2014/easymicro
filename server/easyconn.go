@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/easymicro/metadata"
 	"github.com/easymicro/protocol"
 
 	"github.com/easymicro/log"
@@ -95,18 +94,21 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 			continue
 		}
 		log.Infof("readRequest req %+v", req)
-
-		ctx = metadata.NewClientMdContext(ctx, req.Metadata)
-		//	ctx = context.WithValue(ctx, req)
-		res, err := ec.server.handleRequest(ctx, req)
-		if err != nil {
-			log.Errorf("handleRequest error %v", err)
-			protocol.FreeMsg(req)
-			return
+		ec.server.jobChan <- &workerJob{
+			ctx:  ctx,
+			conn: ec,
+			req:  req,
 		}
-		ec.writeResponse(res)
-		protocol.FreeMsg(req)
-		protocol.FreeMsg(res)
+		/*		ctx = metadata.NewClientMdContext(ctx, req.Metadata)
+				res, err := ec.server.handleRequest(ctx, req)
+				if err != nil {
+					log.Errorf("handleRequest error %v", err)
+					protocol.FreeMsg(req)
+					return
+				}
+				ec.writeResponse(res)
+				protocol.FreeMsg(req)
+				protocol.FreeMsg(res)*/
 	}
 
 }

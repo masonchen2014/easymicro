@@ -15,6 +15,7 @@ import (
 
 	"github.com/easymicro/discovery"
 	"github.com/easymicro/log"
+	"github.com/easymicro/metadata"
 	"github.com/easymicro/protocol"
 	"github.com/easymicro/share"
 )
@@ -34,6 +35,7 @@ type Server struct {
 	serviceMap         map[string]*service
 	maxConnIdleTime    int64
 	mu                 sync.RWMutex
+	jobChan            chan *workerJob
 	doneChan           chan struct{}
 	discovery          discovery.Discovery
 	name               string
@@ -45,10 +47,17 @@ var (
 	contextType   = reflect.TypeOf((*context.Context)(nil)).Elem()
 )
 
+type workerJob struct {
+	ctx  context.Context
+	conn *easyConn
+	req  *protocol.Message
+}
+
 // NewServer returns a new Server.
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		maxConnIdleTime: 10,
+		jobChan:         make(chan *workerJob, 100),
 	}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
@@ -225,6 +234,7 @@ func (server *Server) Serve(network, address string) {
 			Addr: server.advertiseClientUrl,
 		})
 	}
+	go server.startWorkers()
 	server.serve(ln)
 }
 
@@ -377,6 +387,29 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 	http.Handle(rpcPath, server)
 	//	http.Handle(debugPath, debugHTTP{server})
+}
+
+func (server *Server) startWorkers() {
+	for i := 1; i <= 10; i++ {
+		go func(goNum int) {
+			for {
+				select {
+				case job := <-server.jobChan:
+					log.Infof("goroutine %d get job %+v", goNum, job)
+					ctx := metadata.NewClientMdContext(job.ctx, job.req.Metadata)
+					res, err := server.handleRequest(ctx, job.req)
+					if err != nil {
+						log.Errorf("handleRequest error %v", err)
+						protocol.FreeMsg(job.req)
+						return
+					}
+					job.conn.writeResponse(res)
+					protocol.FreeMsg(job.req)
+					protocol.FreeMsg(res)
+				}
+			}
+		}(i)
+	}
 }
 
 // HandleHTTP registers an HTTP handler for RPC messages to DefaultServer

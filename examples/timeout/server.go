@@ -20,7 +20,7 @@ type Arith int
 
 func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 	reply.C = args.A * args.B
-	time.Sleep(10 * time.Second)
+	time.Sleep(6 * time.Second)
 	return nil
 }
 
