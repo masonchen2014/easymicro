@@ -485,6 +485,7 @@ func (client *RPCClient) Call(ctx context.Context, serviceMethod string, args in
 // concurrently so the implementation of conn should protect against
 // concurrent reads or concurrent writes.
 func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
+	log.Infof("create rpc client for netword %s address %s service %s", network, address, servicePath)
 	var conn net.Conn
 	var err error
 	if network == "tcp" {

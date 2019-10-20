@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/easymicro/discovery"
@@ -27,8 +28,10 @@ func NewClient(network, address, servicePath string, opts ...ClientOption) (*Cli
 
 func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster, opts ...ClientOption) (*Client, error) {
 	client := &Client{
-		servicePath: servicePath,
-		selectMode:  RoundRobin,
+		servicePath:  servicePath,
+		selectMode:   RoundRobin,
+		cachedClient: make(map[string]*RPCClient),
+		discovery:    dis,
 	}
 
 	if dis == nil {
@@ -94,7 +97,15 @@ func (client *Client) selectRPCClient() (*RPCClient, error) {
 		rpcClient = client.defaultRPCClient
 		return rpcClient, nil
 	}
+	log.Infof("selectRpcClient before GetAllNodes discovery %+v", client.discovery)
 	nodes := client.discovery.GetAllNodes()
+	/*nodes := []string{
+		"127.0.0.1:8972",
+	}*/
+	log.Infof("selectRpcClient nodes %+v", nodes)
+	if len(nodes) <= 0 {
+		return nil, fmt.Errorf("no avaliable worker nodes")
+	}
 	selectedNode := ""
 	switch client.selectMode {
 	case RandomSelect:
@@ -102,7 +113,10 @@ func (client *Client) selectRPCClient() (*RPCClient, error) {
 
 		//TODO
 	case RoundRobin:
+		selectedNode = nodes[0]
 		//TODO
+	default:
+		selectedNode = nodes[0]
 	}
 	client.mu.RLock()
 	rpcClient = client.cachedClient[selectedNode]

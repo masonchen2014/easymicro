@@ -109,7 +109,7 @@ type Node struct {
 	Info *ServiceInfo
 }
 
-func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) (*EtcdDiscoveryMaster, error) {
+func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) *EtcdDiscoveryMaster {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: time.Second,
@@ -127,17 +127,20 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) (*EtcdDiscover
 
 	if err := master.FetchAllNodesInfo(); err != nil {
 		log.Errorf("NewEtcdDiscoveryMaster GetAllNodes failed %v", err)
-		return nil, err
+		return nil
 	}
 
 	go master.WatchNodes()
-	return master, err
+	log.Infof("etcd discovery master %+v", master)
+	return master
 }
 
 func (m *EtcdDiscoveryMaster) GetAllNodes() []string {
 	addrs := []string{}
+	log.Infof("EtcdDiscoveryMaster before RLock")
 	m.mutex.RLock()
 	for _, node := range m.Nodes {
+		log.Infof("EtcdDiscoveryMaster node %+v", node)
 		addrs = append(addrs, node.Info.Addr)
 	}
 	m.mutex.RUnlock()
@@ -209,4 +212,5 @@ func (m *EtcdDiscoveryMaster) WatchNodes() {
 			}
 		}
 	}
+	log.Infof("EtcdDiscoveryMaster watch nodes exit")
 }
