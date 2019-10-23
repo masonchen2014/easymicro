@@ -30,6 +30,7 @@ func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster, opts 
 	client := &Client{
 		servicePath:  servicePath,
 		selectMode:   RoundRobin,
+		selector:     NewRoundRobinSelector(),
 		cachedClient: make(map[string]*RPCClient),
 		discovery:    dis,
 	}
@@ -47,6 +48,7 @@ func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster, opts 
 type Client struct {
 	//failMode     FailMode
 	selectMode   SelectMode
+	selector     Selector
 	mu           sync.RWMutex
 	cachedClient map[string]*RPCClient
 
@@ -93,42 +95,26 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 
 func (client *Client) selectRPCClient() (*RPCClient, error) {
 	var rpcClient *RPCClient
-	if client.selectMode == SelectByUser {
-		rpcClient = client.defaultRPCClient
-		return rpcClient, nil
-	}
-	log.Infof("selectRpcClient before GetAllNodes discovery %+v", client.discovery)
 	nodes := client.discovery.GetAllNodes()
-	/*nodes := []string{
-		"127.0.0.1:8972",
-	}*/
-	log.Infof("selectRpcClient nodes %+v", nodes)
 	if len(nodes) <= 0 {
 		return nil, fmt.Errorf("no avaliable worker nodes")
 	}
-	selectedNode := ""
-	switch client.selectMode {
-	case RandomSelect:
-		selectedNode = nodes[0]
-
-		//TODO
-	case RoundRobin:
-		selectedNode = nodes[0]
-		//TODO
-	default:
-		selectedNode = nodes[0]
+	selectedNode := client.selector.Pick(nodes)
+	if selectedNode == nil {
+		return nil, fmt.Errorf("not avaliable worker node")
 	}
+	log.Infof("selected node %+v for call..............", selectedNode)
 	client.mu.RLock()
-	rpcClient = client.cachedClient[selectedNode]
+	rpcClient = client.cachedClient[selectedNode.Addr]
 	client.mu.RUnlock()
 	if rpcClient == nil {
-		rCli, err := NewRPCClient("tcp", selectedNode, client.servicePath)
+		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, client.servicePath)
 		if err != nil {
 			return nil, err
 		}
 		rpcClient = rCli
 		client.mu.Lock()
-		client.cachedClient[selectedNode] = rpcClient
+		client.cachedClient[selectedNode.Addr] = rpcClient
 		client.mu.Unlock()
 	}
 	return rpcClient, nil

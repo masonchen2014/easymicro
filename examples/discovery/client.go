@@ -48,8 +48,40 @@ func main() {
 		A: 25,
 		B: 15,
 	}
+
+	//call 1
 	cli.Call(context.Background(), "Mul", args, reply)
 	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+
+	args = &Args{
+		A: 35,
+		B: 25,
+	}
+	time.Sleep(3 * time.Second)
+	//call 2
+	cli.Call(context.Background(), "Mul", args, reply)
+	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+
+	args = &Args{
+		A: 35,
+		B: 25,
+	}
+	time.Sleep(3 * time.Second)
+
+	//call 3
+	cli.Call(context.Background(), "Mul", args, reply)
+	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+
+	args = &Args{
+		A: 35,
+		B: 25,
+	}
+	time.Sleep(3 * time.Second)
+
+	//call 4
+	cli.Call(context.Background(), "Mul", args, reply)
+	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
+	time.Sleep(1 * time.Second)
 
 	time.Sleep(2000 * time.Second)
 }

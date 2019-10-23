@@ -214,6 +214,7 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 }
 
 func (server *Server) Serve(network, address string) {
+	defer server.Close()
 	ln, err := net.Listen(network, address)
 	if err != nil {
 		log.Fatal("listen error:", err)
@@ -230,12 +231,17 @@ func (server *Server) Serve(network, address string) {
 		}
 		//register discovery
 		go server.discovery.Register(&discovery.ServiceInfo{
-			Name: server.name,
-			Addr: server.advertiseClientUrl,
+			Network: network,
+			Name:    server.name,
+			Addr:    server.advertiseClientUrl,
 		})
 	}
 	go server.startWorkers()
 	server.serve(ln)
+}
+
+func (server *Server) Close() {
+	log.Infof("server is closed")
 }
 
 func (server *Server) serve(l net.Listener) error {

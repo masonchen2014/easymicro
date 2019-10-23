@@ -135,16 +135,16 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) *EtcdDiscovery
 	return master
 }
 
-func (m *EtcdDiscoveryMaster) GetAllNodes() []string {
-	addrs := []string{}
+func (m *EtcdDiscoveryMaster) GetAllNodes() []*ServiceInfo {
+	nodes := []*ServiceInfo{}
 	log.Infof("EtcdDiscoveryMaster before RLock")
 	m.mutex.RLock()
 	for _, node := range m.Nodes {
 		log.Infof("EtcdDiscoveryMaster node %+v", node)
-		addrs = append(addrs, node.Info.Addr)
+		nodes = append(nodes, node.Info)
 	}
 	m.mutex.RUnlock()
-	return addrs
+	return nodes
 }
 
 func (m *EtcdDiscoveryMaster) FetchAllNodesInfo() error {

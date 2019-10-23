@@ -5,7 +5,7 @@ type Discovery interface {
 }
 
 type DiscoveryMaster interface {
-	GetAllNodes() []string
+	GetAllNodes() []*ServiceInfo
 }
 
 //the detail of service
