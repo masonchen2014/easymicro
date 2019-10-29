@@ -7,8 +7,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"reflect"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -40,6 +43,7 @@ type Server struct {
 	discovery          discovery.Discovery
 	name               string
 	advertiseClientUrl string
+	wg                 sync.WaitGroup
 }
 
 var (
@@ -214,7 +218,6 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 }
 
 func (server *Server) Serve(network, address string) {
-	defer server.Close()
 	ln, err := net.Listen(network, address)
 	if err != nil {
 		log.Fatal("listen error:", err)
@@ -230,18 +233,36 @@ func (server *Server) Serve(network, address string) {
 			log.Fatal("no server name or advertise client url to register ")
 		}
 		//register discovery
-		go server.discovery.Register(&discovery.ServiceInfo{
-			Network: network,
-			Name:    server.name,
-			Addr:    server.advertiseClientUrl,
-		})
+		go func() {
+			defer func() {
+				log.Infof("goroutine discovery exit")
+				server.wg.Done()
+			}()
+			server.wg.Add(1)
+			server.discovery.Register(&discovery.ServiceInfo{
+				Network: network,
+				Name:    server.name,
+				Addr:    server.advertiseClientUrl,
+			})
+		}()
 	}
 	go server.startWorkers()
+	go server.handleSignal()
 	server.serve(ln)
 }
 
 func (server *Server) Close() {
+	server.mu.Lock()
+	if server.doneChan != nil {
+		close(server.doneChan)
+	}
+	if server.discovery != nil {
+		server.discovery.UnRegister()
+	}
+	server.mu.Unlock()
+	server.wg.Wait()
 	log.Infof("server is closed")
+	os.Exit(0)
 }
 
 func (server *Server) serve(l net.Listener) error {
@@ -396,8 +417,11 @@ func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 }
 
 func (server *Server) startWorkers() {
-	for i := 1; i <= 10; i++ {
+	workerNum := 10
+	server.wg.Add(workerNum)
+	for i := 1; i <= workerNum; i++ {
 		go func(goNum int) {
+			defer server.wg.Done()
 			for {
 				select {
 				case job := <-server.jobChan:
@@ -412,9 +436,26 @@ func (server *Server) startWorkers() {
 					job.conn.writeResponse(res)
 					protocol.FreeMsg(job.req)
 					protocol.FreeMsg(res)
+				case <-server.getDoneChan():
+					log.Infof("goroutine %d exit", goNum)
+					return
 				}
 			}
 		}(i)
+	}
+}
+
+func (server *Server) handleSignal() {
+	c := make(chan os.Signal)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	for s := range c {
+		switch s {
+		case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM:
+			server.Close()
+			return
+		default:
+			log.Infof("goroutine signal handler capture a signal %+v", s)
+		}
 	}
 }
 

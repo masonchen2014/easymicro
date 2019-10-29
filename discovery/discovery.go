@@ -2,6 +2,7 @@ package discovery
 
 type Discovery interface {
 	Register(*ServiceInfo)
+	UnRegister()
 }
 
 type DiscoveryMaster interface {

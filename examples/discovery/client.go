@@ -64,7 +64,7 @@ func main() {
 
 	args = &Args{
 		A: 35,
-		B: 25,
+		B: 35,
 	}
 	time.Sleep(3 * time.Second)
 
@@ -74,7 +74,7 @@ func main() {
 
 	args = &Args{
 		A: 35,
-		B: 25,
+		B: 45,
 	}
 	time.Sleep(3 * time.Second)
 

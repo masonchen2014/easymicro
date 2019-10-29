@@ -64,7 +64,7 @@ func (s *EtcdDiscovery) Register(info *ServiceInfo) {
 	}
 }
 
-func (d *EtcdDiscovery) Close() {
+func (d *EtcdDiscovery) UnRegister() {
 	close(d.stopCh)
 }
 
@@ -137,7 +137,6 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) *EtcdDiscovery
 
 func (m *EtcdDiscoveryMaster) GetAllNodes() []*ServiceInfo {
 	nodes := []*ServiceInfo{}
-	log.Infof("EtcdDiscoveryMaster before RLock")
 	m.mutex.RLock()
 	for _, node := range m.Nodes {
 		log.Infof("EtcdDiscoveryMaster node %+v", node)
@@ -155,7 +154,6 @@ func (m *EtcdDiscoveryMaster) FetchAllNodesInfo() error {
 	}
 
 	for _, kv := range resp.Kvs {
-		log.Infof("ValueToServiceInfo key %v value %v", string(kv.Key), string(kv.Value))
 		info, err := ValueToServiceInfo(kv.Value)
 		if err != nil {
 			return err
