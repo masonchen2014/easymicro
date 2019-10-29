@@ -417,7 +417,7 @@ func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 }
 
 func (server *Server) startWorkers() {
-	workerNum := 10
+	workerNum := 100
 	server.wg.Add(workerNum)
 	for i := 1; i <= workerNum; i++ {
 		go func(goNum int) {

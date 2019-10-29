@@ -8,6 +8,7 @@ import (
 	"github.com/easymicro/discovery"
 	"github.com/easymicro/log"
 	"github.com/easymicro/protocol"
+	"github.com/sony/gobreaker"
 )
 
 func NewClient(network, address, servicePath string, opts ...ClientOption) (*Client, error) {
@@ -73,15 +74,29 @@ type Client struct {
 	HeartBeatTryNums  int
 	HeartBeatTimeout  int
 	HeartBeatInterval int64
+
+	breaker *gobreaker.CircuitBreaker
 }
 
 func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
-	rpcClient, err := client.selectRPCClient()
-	if err != nil {
-		log.Errorf("select rpc client failed for err %v", err)
-		return nil
+	if client.breaker != nil {
+		_, err := client.breaker.Execute(func() (interface{}, error) {
+			rpcClient, err := client.selectRPCClient()
+			if err != nil {
+				log.Errorf("select rpc client failed for err %v", err)
+				return nil, err
+			}
+			return nil, rpcClient.Call(ctx, serviceMethod, args, reply, options...)
+		})
+		return err
+	} else {
+		rpcClient, err := client.selectRPCClient()
+		if err != nil {
+			log.Errorf("select rpc client failed for err %v", err)
+			return nil
+		}
+		return rpcClient.Call(ctx, serviceMethod, args, reply, options...)
 	}
-	return rpcClient.Call(ctx, serviceMethod, args, reply, options...)
 }
 
 func (client *Client) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call, options ...BeforeOrAfterCallOption) *Call {

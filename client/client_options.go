@@ -1,6 +1,9 @@
 package client
 
-import "github.com/easymicro/log"
+import (
+	"github.com/easymicro/log"
+	"github.com/sony/gobreaker"
+)
 
 //client set function
 type ClientOption func(*Client)
@@ -25,4 +28,10 @@ func SetRandomSelector() ClientOption {
 
 func SetRoundRobinSelector() ClientOption {
 	return SetSelector(RoundRobin)
+}
+
+func SetCircuitBreaker(setting gobreaker.Settings) ClientOption {
+	return func(c *Client) {
+		c.breaker = gobreaker.NewCircuitBreaker(setting)
+	}
 }
