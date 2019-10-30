@@ -8,6 +8,7 @@ import (
 	"github.com/easymicro/discovery"
 	"github.com/easymicro/log"
 	"github.com/easymicro/protocol"
+	"github.com/juju/ratelimit"
 	"github.com/sony/gobreaker"
 )
 
@@ -76,9 +77,13 @@ type Client struct {
 	HeartBeatInterval int64
 
 	breaker *gobreaker.CircuitBreaker
+	bucket  *ratelimit.Bucket
 }
 
 func (client *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
+	if client.bucket != nil {
+		client.bucket.Wait(1)
+	}
 	if client.breaker != nil {
 		_, err := client.breaker.Execute(func() (interface{}, error) {
 			rpcClient, err := client.selectRPCClient()
