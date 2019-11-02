@@ -114,6 +114,9 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, args interfa
 }
 
 func (client *Client) selectRPCClient() (*RPCClient, error) {
+	if client.discovery == nil {
+		return client.defaultRPCClient, nil
+	}
 	var rpcClient *RPCClient
 	nodes := client.discovery.GetAllNodes()
 	if len(nodes) <= 0 {
