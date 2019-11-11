@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	dis "github.com/easymicro/discovery"
-	"github.com/easymicro/log"
+	dis "github.com/masonchen2014/easymicro/discovery"
+	"github.com/masonchen2014/easymicro/log"
 	"github.com/sony/gobreaker"
 
-	"github.com/easymicro/client"
+	"github.com/masonchen2014/easymicro/client"
 )
 
 type Args struct {

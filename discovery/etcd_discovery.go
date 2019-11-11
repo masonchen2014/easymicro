@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/easymicro/log"
+	"github.com/masonchen2014/easymicro/log"
 
 	"github.com/coreos/etcd/clientv3"
-	"github.com/easymicro/share"
+	"github.com/masonchen2014/easymicro/share"
 )
 
 type EtcdDiscovery struct {

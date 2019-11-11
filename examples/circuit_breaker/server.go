@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/easymicro/server"
+	"github.com/masonchen2014/easymicro/server"
 )
 
 type Args struct {

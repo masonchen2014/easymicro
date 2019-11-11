@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/easymicro/log"
-	"github.com/easymicro/metadata"
-	"github.com/easymicro/protocol"
-	"github.com/easymicro/share"
+	"github.com/masonchen2014/easymicro/log"
+	"github.com/masonchen2014/easymicro/metadata"
+	"github.com/masonchen2014/easymicro/protocol"
+	"github.com/masonchen2014/easymicro/share"
 )
 
 const (

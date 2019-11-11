@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/easymicro/log"
+	"github.com/masonchen2014/easymicro/log"
 
-	"github.com/easymicro/client"
+	"github.com/masonchen2014/easymicro/client"
 )
 
 type Args struct {

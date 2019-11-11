@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/easymicro/discovery"
-	"github.com/easymicro/log"
-	"github.com/easymicro/protocol"
+	"github.com/masonchen2014/easymicro/discovery"
+	"github.com/masonchen2014/easymicro/log"
+	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/juju/ratelimit"
 	"github.com/sony/gobreaker"
 )

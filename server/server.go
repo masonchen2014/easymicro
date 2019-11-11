@@ -16,11 +16,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/easymicro/discovery"
-	"github.com/easymicro/log"
-	"github.com/easymicro/metadata"
-	"github.com/easymicro/protocol"
-	"github.com/easymicro/share"
+	"github.com/masonchen2014/easymicro/discovery"
+	"github.com/masonchen2014/easymicro/log"
+	"github.com/masonchen2014/easymicro/metadata"
+	"github.com/masonchen2014/easymicro/protocol"
+	"github.com/masonchen2014/easymicro/share"
 )
 
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
@@ -323,13 +323,13 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	service := server.serviceMap[serviceName]
 	server.serviceMapMu.RUnlock()
 	if service == nil {
-		err = errors.New("easymicro: can't find service " + serviceName)
+		err = errors.New("masonchen2014/easymicro: can't find service " + serviceName)
 		return nil, err
 	}
 	mtype := service.method[methodName]
 	log.Infof("mtype is %+v", mtype)
 	if mtype == nil {
-		err = errors.New("easymicro: can't find method " + methodName)
+		err = errors.New("masonchen2014/easymicro: can't find method " + methodName)
 		return nil, err
 	}
 

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/easymicro/discovery"
-	"github.com/easymicro/log"
+	"github.com/masonchen2014/easymicro/discovery"
+	"github.com/masonchen2014/easymicro/log"
 )
 
 type Selector interface {

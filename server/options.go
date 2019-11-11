@@ -1,6 +1,6 @@
 package server
 
-import "github.com/easymicro/discovery"
+import "github.com/masonchen2014/easymicro/discovery"
 
 type ServerOption func(*Server) error
 

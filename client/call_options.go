@@ -1,6 +1,6 @@
 package client
 
-import "github.com/easymicro/protocol"
+import "github.com/masonchen2014/easymicro/protocol"
 
 //call set function
 type CallOption func(*Call)

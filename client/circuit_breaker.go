@@ -1,7 +1,7 @@
 package client
 
 import (
-	"github.com/easymicro/log"
+	"github.com/masonchen2014/easymicro/log"
 	"github.com/sony/gobreaker"
 )
 

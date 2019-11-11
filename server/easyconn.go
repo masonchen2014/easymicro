@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/easymicro/protocol"
+	"github.com/masonchen2014/easymicro/protocol"
 
-	"github.com/easymicro/log"
+	"github.com/masonchen2014/easymicro/log"
 )
 
 type easyConn struct {

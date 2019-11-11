@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/easymicro/log"
-	"github.com/easymicro/metadata"
-	"github.com/easymicro/server"
+	"github.com/masonchen2014/easymicro/log"
+	"github.com/masonchen2014/easymicro/metadata"
+	"github.com/masonchen2014/easymicro/server"
 )
 
 type Args struct {
