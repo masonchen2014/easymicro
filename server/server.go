@@ -426,12 +426,17 @@ func (server *Server) startWorkers() {
 				select {
 				case job := <-server.jobChan:
 					log.Infof("goroutine %d get job %+v", goNum, job)
-					ctx := metadata.NewClientMdContext(job.ctx, job.req.Metadata)
+					ctx, err := metadata.ExtractClientMdContexFromMd(job.ctx, job.req.Metadata)
+					if err != nil {
+						log.Errorf("ExtractClientMdContexFromMd error %v", err)
+						protocol.FreeMsg(job.req)
+						continue
+					}
 					res, err := server.handleRequest(ctx, job.req)
 					if err != nil {
 						log.Errorf("handleRequest error %v", err)
 						protocol.FreeMsg(job.req)
-						return
+						continue
 					}
 					job.conn.writeResponse(res)
 					protocol.FreeMsg(job.req)

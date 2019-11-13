@@ -107,8 +107,8 @@ func (client *RPCClient) createRequest(call *Call, seq uint64) (*protocol.Messag
 
 	req.SetSeq(seq)
 
-	md, b := metadata.FromClientMdContext(call.ctx)
-	if b {
+	md := metadata.ExtractMdFromClientCtx(call.ctx)
+	if len(md) > 0 {
 		req.Metadata = md
 	}
 
