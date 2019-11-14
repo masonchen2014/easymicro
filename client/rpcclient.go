@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/masonchen2014/easymicro/log"
-	"github.com/masonchen2014/easymicro/metadata"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
 )
@@ -107,7 +106,7 @@ func (client *RPCClient) createRequest(call *Call, seq uint64) (*protocol.Messag
 
 	req.SetSeq(seq)
 
-	md := metadata.ExtractMdFromClientCtx(call.ctx)
+	md := extractMdFromClientCtx(call.ctx)
 	if len(md) > 0 {
 		req.Metadata = md
 	}
@@ -515,4 +514,21 @@ func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
 	go client.input()
 	go client.keepalive()
 	return client, nil
+}
+
+func extractMdFromClientCtx(ctx context.Context) map[string]string {
+	md := make(map[string]string)
+	comMd, ok := ctx.Value(share.ReqMetaDataKey{}).(map[string]string)
+	if ok {
+		for k, v := range comMd {
+			md[k] = v
+		}
+	}
+	spanMd, ok := ctx.Value(share.SpanMetaDataKey{}).(map[string]string)
+	if ok {
+		for k, v := range spanMd {
+			md[k] = v
+		}
+	}
+	return md
 }

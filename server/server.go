@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,9 +20,10 @@ import (
 
 	"github.com/masonchen2014/easymicro/discovery"
 	"github.com/masonchen2014/easymicro/log"
-	"github.com/masonchen2014/easymicro/metadata"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
+	"github.com/opentracing/basictracer-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
@@ -268,7 +271,7 @@ func (server *Server) Close() {
 func (server *Server) serve(l net.Listener) error {
 	var tempDelay time.Duration     // how long to sleep on accept failure
 	baseCtx := context.Background() // base is always background, per Issue 16220
-	ctx := context.WithValue(baseCtx, ServerContextKey, server)
+	ctx := context.WithValue(baseCtx, ServerDataKey{}, server)
 	for {
 		rw, e := l.Accept()
 		if e != nil {
@@ -347,7 +350,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	}
 
 	replyv := argsReplyPools.Get(mtype.ReplyType)
-	ctx = context.WithValue(ctx, ReplyContextKey, res)
+	ctx = context.WithValue(ctx, ReplyMessageDataKey{}, res)
 	if mtype.ArgType.Kind() != reflect.Ptr {
 		err = service.call(ctx, mtype, reflect.ValueOf(argv).Elem(), reflect.ValueOf(replyv))
 	} else {
@@ -404,7 +407,7 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	ec := newEasyConn(server, conn)
 	baseCtx := context.Background() // base is always background, per Issue 16220
-	ctx := context.WithValue(baseCtx, ServerContextKey, server)
+	ctx := context.WithValue(baseCtx, ServerDataKey{}, server)
 	ec.serveConn(ctx)
 }
 
@@ -426,7 +429,7 @@ func (server *Server) startWorkers() {
 				select {
 				case job := <-server.jobChan:
 					log.Infof("goroutine %d get job %+v", goNum, job)
-					ctx, err := metadata.ExtractClientMdContexFromMd(job.ctx, job.req.Metadata)
+					ctx, err := extractClientMdContexFromMd(job.ctx, job.req.Metadata)
 					if err != nil {
 						log.Errorf("ExtractClientMdContexFromMd error %v", err)
 						protocol.FreeMsg(job.req)
@@ -472,11 +475,65 @@ func HandleHTTP() {
 }
 
 func SendMetaData(ctx context.Context, md map[string]string) error {
-	replyMessage, ok := ctx.Value(ReplyContextKey).(*protocol.Message)
+	replyMessage, ok := ctx.Value(ReplyMessageDataKey{}).(*protocol.Message)
 	if !ok {
 		return errors.New("failed to fetch reply message from context")
 	}
 
 	replyMessage.Metadata = md
 	return nil
+}
+
+func extractClientMdContexFromMd(ctx context.Context, md map[string]string) (context.Context, error) {
+	var traceId, spanId uint64
+	var sampled, hasSpanCtx bool
+	var err error
+	decodedBaggage := make(map[string]string)
+	commonMd := make(map[string]string)
+	for k, v := range md {
+		switch strings.ToLower(k) {
+		case share.FieldNameTraceID:
+			hasSpanCtx = true
+			traceId, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return nil, opentracing.ErrSpanContextCorrupted
+			}
+		case share.FieldNameSpanID:
+			hasSpanCtx = true
+			spanId, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return nil, opentracing.ErrSpanContextCorrupted
+			}
+		case share.FieldNameSampled:
+			hasSpanCtx = true
+			sampled, err = strconv.ParseBool(v)
+			if err != nil {
+				return nil, opentracing.ErrSpanContextCorrupted
+			}
+		default:
+			lowercaseK := strings.ToLower(k)
+			if strings.HasPrefix(lowercaseK, share.PrefixBaggage) {
+				hasSpanCtx = true
+				decodedBaggage[strings.TrimPrefix(lowercaseK, share.PrefixBaggage)] = v
+			} else {
+				commonMd[k] = v
+			}
+		}
+
+	}
+	if len(commonMd) > 0 {
+		ctx = context.WithValue(ctx, share.ReqMetaDataKey{}, md)
+	}
+
+	if hasSpanCtx {
+		spanCtx := basictracer.SpanContext{
+			TraceID: traceId,
+			SpanID:  spanId,
+			Sampled: sampled,
+			Baggage: decodedBaggage,
+		}
+		ctx = context.WithValue(ctx, share.SpanMetaDataKey{}, spanCtx)
+	}
+
+	return ctx, nil
 }
