@@ -50,11 +50,7 @@ func (ec *easyConn) writeResponse(m *protocol.Message) error {
 	return err
 }
 
-/*func (ec *easyConn) Close() error {
-	return nil
-}*/
-
-func (ec *easyConn) serveConn(ctx context.Context) {
+func (ec *easyConn) serveConn() {
 	defer func() {
 		log.Infof("serveConn exit")
 		if err := recover(); err != nil {
@@ -66,10 +62,6 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 			}
 			buf = buf[:ss]
 		}
-		/*	s.mu.Lock()
-			delete(s.activeConn, conn)
-			s.mu.Unlock()*/
-
 		ec.rwc.Close()
 
 	}()
@@ -87,14 +79,14 @@ func (ec *easyConn) serveConn(ctx context.Context) {
 		}
 
 		if req.IsHeartbeat() {
-			log.Infof("server receives heartbeat at time %d", time.Now().Unix())
+			log.Debugf("server receives heartbeat at time %d", time.Now().Unix())
 			req.SetMessageType(protocol.Response)
 			ec.writeResponse(req)
 			protocol.FreeMsg(req)
 			continue
 		}
-		log.Infof("readRequest req %+v", req)
-		ctx = context.WithValue(ctx, ConnDataKey{}, ec)
+		log.Debugf("readRequest req %+v", req)
+		ctx := context.WithValue(context.Background(), ConnDataKey{}, ec)
 		ec.server.jobChan <- &workerJob{
 			ctx:  ctx,
 			conn: ec,

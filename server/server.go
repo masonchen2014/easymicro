@@ -38,6 +38,8 @@ type Server struct {
 	maxConnIdleTime int64
 	mu              sync.RWMutex
 	jobChan         chan *workerJob
+	jobChanSize     int64
+	workerNum       int64
 	doneChan        chan struct{}
 	discovery       discovery.Discovery
 	name            string
@@ -59,8 +61,9 @@ type workerJob struct {
 // NewServer returns a new Server.
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
-		maxConnIdleTime: 10,
-		jobChan:         make(chan *workerJob, 100),
+		maxConnIdleTime: defaultOption.MaxConnIdleTime,
+		jobChanSize:     defaultOption.JobChanSize,
+		workerNum:       defaultOption.WorkerNum,
 	}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
@@ -68,6 +71,7 @@ func NewServer(opts ...ServerOption) *Server {
 		}
 	}
 
+	s.jobChan = make(chan *workerJob, s.jobChanSize)
 	return s
 }
 
@@ -261,9 +265,7 @@ func (server *Server) Close() {
 }
 
 func (server *Server) serve(l net.Listener) error {
-	var tempDelay time.Duration     // how long to sleep on accept failure
-	baseCtx := context.Background() // base is always background, per Issue 16220
-	ctx := context.WithValue(baseCtx, ServerDataKey{}, server)
+	var tempDelay time.Duration // how long to sleep on accept failure
 	for {
 		rw, e := l.Accept()
 		if e != nil {
@@ -293,7 +295,7 @@ func (server *Server) serve(l net.Listener) error {
 		}
 
 		ec := newEasyConn(server, rw)
-		go ec.serveConn(ctx)
+		go ec.serveConn()
 	}
 }
 
@@ -312,33 +314,33 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	methodName := req.ServiceMethod
 
 	res = req.Clone()
-
 	res.SetMessageType(protocol.Response)
+
 	server.serviceMapMu.RLock()
 	service := server.serviceMap[serviceName]
 	server.serviceMapMu.RUnlock()
 	if service == nil {
-		err = errors.New("masonchen2014/easymicro: can't find service " + serviceName)
-		return nil, err
+		err = errors.New("easymicro: can't find service " + serviceName)
+		return handleError(res, err)
 	}
 	mtype := service.method[methodName]
-	log.Infof("mtype is %+v", mtype)
 	if mtype == nil {
-		err = errors.New("masonchen2014/easymicro: can't find method " + methodName)
-		return nil, err
+		err = errors.New("easymicro: can't find method " + methodName)
+		return handleError(res, err)
 	}
 
 	var argv = argsReplyPools.Get(mtype.ArgType)
-
 	codec := share.Codecs[req.SerializeType()]
 	if codec == nil {
+		argsReplyPools.Put(mtype.ArgType, argv)
 		err = fmt.Errorf("can not find codec for %d", req.SerializeType())
-		return nil, err
+		return handleError(res, err)
 	}
 
 	err = codec.Decode(req.Payload, argv)
 	if err != nil {
-		return nil, err
+		argsReplyPools.Put(mtype.ArgType, argv)
+		return handleError(res, err)
 	}
 
 	replyv := argsReplyPools.Get(mtype.ReplyType)
@@ -349,24 +351,24 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 		err = service.call(ctx, mtype, reflect.ValueOf(argv), reflect.ValueOf(replyv))
 	}
 
-	argsReplyPools.Put(mtype.ArgType, argv)
 	if err != nil {
+		argsReplyPools.Put(mtype.ArgType, argv)
 		argsReplyPools.Put(mtype.ReplyType, replyv)
 		return handleError(res, err)
 	}
 
 	if !req.IsOneway() {
 		data, err := codec.Encode(replyv)
-		argsReplyPools.Put(mtype.ReplyType, replyv)
 		if err != nil {
+			argsReplyPools.Put(mtype.ArgType, argv)
+			argsReplyPools.Put(mtype.ReplyType, replyv)
 			return handleError(res, err)
-
 		}
 		res.Payload = data
-	} else if replyv != nil {
-		argsReplyPools.Put(mtype.ReplyType, replyv)
 	}
 
+	argsReplyPools.Put(mtype.ArgType, argv)
+	argsReplyPools.Put(mtype.ReplyType, replyv)
 	return res, nil
 }
 
@@ -398,9 +400,7 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
 
 	ec := newEasyConn(server, conn)
-	baseCtx := context.Background() // base is always background, per Issue 16220
-	ctx := context.WithValue(baseCtx, ServerDataKey{}, server)
-	ec.serveConn(ctx)
+	ec.serveConn()
 }
 
 // HandleHTTP registers an HTTP handler for RPC messages on rpcPath,
@@ -411,16 +411,16 @@ func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 	//	http.Handle(debugPath, debugHTTP{server})
 }
 
+//start job workers that handle all the requests from client
 func (server *Server) startWorkers() {
-	workerNum := 100
-	server.wg.Add(workerNum)
-	for i := 1; i <= workerNum; i++ {
+	server.wg.Add(int(server.workerNum))
+	for i := 1; i <= int(server.workerNum); i++ {
 		go func(goNum int) {
 			defer server.wg.Done()
 			for {
 				select {
 				case job := <-server.jobChan:
-					log.Infof("goroutine %d get job %+v", goNum, job)
+					log.Debugf("goroutine %d get job %+v", goNum, job)
 					ctx, err := extractClientMdContexFromMd(job.ctx, job.req.Metadata)
 					if err != nil {
 						log.Errorf("ExtractClientMdContexFromMd error %v", err)
@@ -431,8 +431,6 @@ func (server *Server) startWorkers() {
 					res, err := server.handleRequest(ctx, job.req)
 					if err != nil {
 						log.Errorf("handleRequest error %v", err)
-						protocol.FreeMsg(job.req)
-						continue
 					}
 					job.conn.writeResponse(res)
 					protocol.FreeMsg(job.req)

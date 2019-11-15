@@ -15,3 +15,30 @@ func SetEtcdDiscovery(endpoints []string, advertiseUrl string) ServerOption {
 		return nil
 	}
 }
+
+func SetBasicOption(opt Option) ServerOption {
+	return func(s *Server) error {
+		if opt.MaxConnIdleTime > 0 {
+			s.maxConnIdleTime = opt.MaxConnIdleTime
+		}
+		if opt.JobChanSize > 0 {
+			s.jobChanSize = opt.JobChanSize
+		}
+		if opt.WorkerNum > 0 {
+			s.workerNum = opt.WorkerNum
+		}
+		return nil
+	}
+}
+
+type Option struct {
+	MaxConnIdleTime int64
+	JobChanSize     int64
+	WorkerNum       int64
+}
+
+var defaultOption = &Option{
+	MaxConnIdleTime: 10,
+	JobChanSize:     200,
+	WorkerNum:       100,
+}

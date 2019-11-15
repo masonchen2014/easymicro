@@ -251,7 +251,6 @@ func (client *RPCClient) send(call *Call) {
 
 func (client *RPCClient) readResponse(resp *protocol.Message) (*protocol.Message, error) {
 	r := bufio.NewReaderSize(client.conn, 1024)
-	//resp := protocol.GetPooledMsg()
 	err := resp.Decode(r)
 	return resp, err
 }
@@ -320,6 +319,7 @@ func (client *RPCClient) input() {
 	for err == nil {
 		_, err = client.readResponse(resp)
 		if err != nil {
+			log.Errorf("readResponse error %+v", err)
 			err = client.reconnect()
 			if err != nil {
 				break
@@ -340,15 +340,28 @@ func (client *RPCClient) input() {
 		}
 
 		if call != nil {
+			err = checkReplyError(resp)
+			if err != nil {
+				call.Error = err
+				call.done()
+				continue
+			}
+
 			codec := share.Codecs[resp.SerializeType()]
 			if codec == nil {
 				err = fmt.Errorf("can not find codec for %d", resp.SerializeType())
-				break
+				call.Error = err
+				call.done()
+				continue
 			}
+
 			err = codec.Decode(resp.Payload, call.Reply)
 			if err != nil {
-				break
+				call.Error = err
+				call.done()
+				continue
 			}
+
 			if resp.Metadata != nil {
 				call.Metadata = resp.Metadata
 			}
@@ -373,6 +386,14 @@ func (call *Call) done() {
 		log.Errorf("rpc: discarding Call reply due to insufficient Done chan capacity")
 
 	}
+}
+
+func checkReplyError(reply *protocol.Message) error {
+	if reply.MessageStatusType() == protocol.Error {
+		err := reply.Metadata[protocol.ServiceError]
+		return errors.New(err)
+	}
+	return nil
 }
 
 // DialHTTP connects to an HTTP RPC server at the specified network address

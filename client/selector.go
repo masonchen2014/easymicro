@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/masonchen2014/easymicro/discovery"
-	"github.com/masonchen2014/easymicro/log"
 )
 
 type Selector interface {
@@ -25,7 +24,6 @@ func NewRoundRobinSelector() *RoundRobinSelector {
 func (s *RoundRobinSelector) Pick(nodes []*discovery.ServiceInfo) *discovery.ServiceInfo {
 	s.mu.Lock()
 	s.LastIndex = (s.LastIndex + 1) % int64(len(nodes))
-	log.Infof("LastIndex %d-------------", s.LastIndex)
 	node := nodes[s.LastIndex]
 	s.mu.Unlock()
 	return node

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/discovery"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
-	"github.com/juju/ratelimit"
 	"github.com/sony/gobreaker"
 )
 
@@ -126,7 +126,6 @@ func (client *Client) selectRPCClient() (*RPCClient, error) {
 	if selectedNode == nil {
 		return nil, fmt.Errorf("not avaliable worker node")
 	}
-	log.Infof("selected node %+v for call..............", selectedNode)
 	client.mu.RLock()
 	rpcClient = client.cachedClient[selectedNode.Addr]
 	client.mu.RUnlock()

@@ -42,7 +42,7 @@ var (
 
 const (
 	// ServiceError contains error info of service invocation
-	ServiceError = "__rpcx_error__"
+	ServiceError = "easymicro_error__"
 )
 
 // MessageType is message type of requests and resposnes.
