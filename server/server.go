@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -22,8 +20,6 @@ import (
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
-	"github.com/opentracing/basictracer-go"
-	"github.com/opentracing/opentracing-go"
 )
 
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
@@ -36,17 +32,17 @@ const (
 )
 
 type Server struct {
-	ln                 net.Listener
-	serviceMapMu       sync.RWMutex
-	serviceMap         map[string]*service
-	maxConnIdleTime    int64
-	mu                 sync.RWMutex
-	jobChan            chan *workerJob
-	doneChan           chan struct{}
-	discovery          discovery.Discovery
-	name               string
-	advertiseClientUrl string
-	wg                 sync.WaitGroup
+	ln              net.Listener
+	serviceMapMu    sync.RWMutex
+	serviceMap      map[string]*service
+	maxConnIdleTime int64
+	mu              sync.RWMutex
+	jobChan         chan *workerJob
+	doneChan        chan struct{}
+	discovery       discovery.Discovery
+	name            string
+	advertiseUrl    string
+	wg              sync.WaitGroup
 }
 
 var (
@@ -73,10 +69,6 @@ func NewServer(opts ...ServerOption) *Server {
 	}
 
 	return s
-}
-
-func (server *Server) SetAdvertiseClientUrl(url string) {
-	server.advertiseClientUrl = url
 }
 
 //Register a service
@@ -232,7 +224,7 @@ func (server *Server) Serve(network, address string) {
 	}
 
 	if server.discovery != nil {
-		if server.name == "" || server.advertiseClientUrl == "" {
+		if server.name == "" || server.advertiseUrl == "" {
 			log.Fatal("no server name or advertise client url to register ")
 		}
 		//register discovery
@@ -245,7 +237,7 @@ func (server *Server) Serve(network, address string) {
 			server.discovery.Register(&discovery.ServiceInfo{
 				Network: network,
 				Name:    server.name,
-				Addr:    server.advertiseClientUrl,
+				Addr:    server.advertiseUrl,
 			})
 		}()
 	}
@@ -435,6 +427,7 @@ func (server *Server) startWorkers() {
 						protocol.FreeMsg(job.req)
 						continue
 					}
+
 					res, err := server.handleRequest(ctx, job.req)
 					if err != nil {
 						log.Errorf("handleRequest error %v", err)
@@ -472,68 +465,4 @@ func (server *Server) handleSignal() {
 // It is still necessary to invoke http.Serve(), typically in a go statement.
 func HandleHTTP() {
 	DefaultServer.HandleHTTP(DefaultRPCPath, DefaultDebugPath)
-}
-
-func SendMetaData(ctx context.Context, md map[string]string) error {
-	replyMessage, ok := ctx.Value(ReplyMessageDataKey{}).(*protocol.Message)
-	if !ok {
-		return errors.New("failed to fetch reply message from context")
-	}
-
-	replyMessage.Metadata = md
-	return nil
-}
-
-func extractClientMdContexFromMd(ctx context.Context, md map[string]string) (context.Context, error) {
-	var traceId, spanId uint64
-	var sampled, hasSpanCtx bool
-	var err error
-	decodedBaggage := make(map[string]string)
-	commonMd := make(map[string]string)
-	for k, v := range md {
-		switch strings.ToLower(k) {
-		case share.FieldNameTraceID:
-			hasSpanCtx = true
-			traceId, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return nil, opentracing.ErrSpanContextCorrupted
-			}
-		case share.FieldNameSpanID:
-			hasSpanCtx = true
-			spanId, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return nil, opentracing.ErrSpanContextCorrupted
-			}
-		case share.FieldNameSampled:
-			hasSpanCtx = true
-			sampled, err = strconv.ParseBool(v)
-			if err != nil {
-				return nil, opentracing.ErrSpanContextCorrupted
-			}
-		default:
-			lowercaseK := strings.ToLower(k)
-			if strings.HasPrefix(lowercaseK, share.PrefixBaggage) {
-				hasSpanCtx = true
-				decodedBaggage[strings.TrimPrefix(lowercaseK, share.PrefixBaggage)] = v
-			} else {
-				commonMd[k] = v
-			}
-		}
-
-	}
-	if len(commonMd) > 0 {
-		ctx = context.WithValue(ctx, share.ReqMetaDataKey{}, md)
-	}
-
-	if hasSpanCtx {
-		spanCtx := basictracer.SpanContext{
-			TraceID: traceId,
-			SpanID:  spanId,
-			Sampled: sampled,
-			Baggage: decodedBaggage,
-		}
-		ctx = context.WithValue(ctx, share.SpanMetaDataKey{}, spanCtx)
-	}
-
-	return ctx, nil
 }

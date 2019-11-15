@@ -43,5 +43,3 @@ type ResMetaDataKey struct{}
 
 // SpanMetaDataKey is used to set span metatdata in context of requests.
 type SpanMetaDataKey struct{}
-
-type ServerDataKey struct{}

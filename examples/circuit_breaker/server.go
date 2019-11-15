@@ -33,9 +33,7 @@ func main() {
 	s := server.NewServer(server.SetEtcdDiscovery([]string{
 		"http://127.0.0.1:22379",
 		//"http://172.16.164.179:2379",
-	}))
-
-	s.SetAdvertiseClientUrl("127.0.0.1:8972")
+	}), "127.0.0.1:8972")
 
 	s.RegisterName("Arith", new(Arith))
 	s.Serve("tcp", ":8972")
