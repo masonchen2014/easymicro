@@ -9,6 +9,7 @@ import (
 	"github.com/masonchen2014/easymicro/metadata"
 	"github.com/masonchen2014/easymicro/server"
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"sourcegraph.com/sourcegraph/appdash"
 	appdashot "sourcegraph.com/sourcegraph/appdash/opentracing"
 )
@@ -34,6 +35,11 @@ func (t *Arith) Add(ctx context.Context, args *Args, reply *Reply) error {
 		sp = opentracing.StartSpan("/Add", opentracing.ChildOf(sc))
 	}
 	defer sp.Finish()
+	//set span
+	ec := server.FromClientConnContext(ctx)
+	if ec != nil {
+		ext.PeerAddress.Set(sp, ec.RemoteAddr().String())
+	}
 	reply.C = args.A + args.B
 	randNum := rand.Intn(5)
 	time.Sleep(time.Duration(randNum) * time.Second)

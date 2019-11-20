@@ -45,6 +45,8 @@ type Server struct {
 	name            string
 	advertiseUrl    string
 	wg              sync.WaitGroup
+	useGateWay      bool
+	gateWayAddr     string
 }
 
 var (
@@ -247,6 +249,10 @@ func (server *Server) Serve(network, address string) {
 	}
 	go server.startWorkers()
 	go server.handleSignal()
+
+	if server.useGateWay {
+		ln = server.startGateway(ln)
+	}
 	server.serve(ln)
 }
 

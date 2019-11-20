@@ -37,6 +37,10 @@ func init() {
 	addClient = client
 }
 
+func doSomething() {
+
+}
+
 func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 	span := opentracing.StartSpan("/Mul")
 	defer span.Finish()
@@ -45,6 +49,12 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 	time.Sleep(time.Duration(randNum) * time.Second)
 	replyAdd := &Reply{}
 	ctxTm, _ := context.WithTimeout(context.Background(), 3*time.Second)
+	//set span
+	ec := server.FromClientConnContext(ctx)
+	if ec != nil {
+		ext.PeerAddress.Set(span, ec.RemoteAddr().String())
+	}
+
 	ctxTm, err := metadata.NewClientSpanContext(ctxTm, span)
 	log.Infof("ctxTm with span %+v", ctxTm)
 	if err != nil {

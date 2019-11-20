@@ -31,6 +31,14 @@ func SetBasicOption(opt Option) ServerOption {
 	}
 }
 
+func SetGateWayMode(gatewayUrl string) ServerOption {
+	return func(s *Server) error {
+		s.useGateWay = true
+		s.gateWayAddr = gatewayUrl
+		return nil
+	}
+}
+
 type Option struct {
 	MaxConnIdleTime int64
 	JobChanSize     int64

@@ -28,9 +28,12 @@ func SendMetaData(ctx context.Context, md map[string]string) error {
 	return nil
 }
 
-func FromClientConnContext(ctx context.Context) (*easyConn, bool) {
+func FromClientConnContext(ctx context.Context) *easyConn {
 	ec, ok := ctx.Value(ConnDataKey{}).(*easyConn)
-	return ec, ok
+	if ok {
+		return ec
+	}
+	return nil
 }
 
 func extractClientMdContexFromMd(ctx context.Context, md map[string]string) (context.Context, error) {

@@ -50,6 +50,14 @@ func (ec *easyConn) writeResponse(m *protocol.Message) error {
 	return err
 }
 
+func (ec *easyConn) LocalAddr() net.Addr {
+	return ec.rwc.LocalAddr()
+}
+
+func (ec *easyConn) RemoteAddr() net.Addr {
+	return ec.rwc.RemoteAddr()
+}
+
 func (ec *easyConn) serveConn() {
 	defer func() {
 		log.Infof("serveConn exit")
