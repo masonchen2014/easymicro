@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/juju/ratelimit"
@@ -30,7 +31,7 @@ func NewClient(network, address, servicePath string, opts ...ClientOption) (*Cli
 
 func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster, opts ...ClientOption) (*Client, error) {
 	client := &Client{
-		servicePath:  servicePath,
+		servicePath:  strings.ToLower(servicePath),
 		selectMode:   RoundRobin,
 		selector:     NewRoundRobinSelector(),
 		cachedClient: make(map[string]*RPCClient),
@@ -91,7 +92,7 @@ func (client *Client) Call(ctx context.Context, serviceMethod string, args inter
 				log.Errorf("select rpc client failed for err %v", err)
 				return nil, err
 			}
-			return nil, rpcClient.Call(ctx, serviceMethod, args, reply, options...)
+			return nil, rpcClient.Call(ctx, strings.ToLower(serviceMethod), args, reply, options...)
 		})
 		return err
 	} else {
@@ -100,7 +101,7 @@ func (client *Client) Call(ctx context.Context, serviceMethod string, args inter
 			log.Errorf("select rpc client failed for err %v", err)
 			return nil
 		}
-		return rpcClient.Call(ctx, serviceMethod, args, reply, options...)
+		return rpcClient.Call(ctx, strings.ToLower(serviceMethod), args, reply, options...)
 	}
 }
 

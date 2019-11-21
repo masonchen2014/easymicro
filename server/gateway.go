@@ -52,46 +52,68 @@ func easyMicroPrefixByteMatcher() cmux.Matcher {
 
 func (s *Server) startHTTP1APIGateway(ln net.Listener) {
 	router := httprouter.New()
-	router.POST("/*servicePath", s.handleGatewayRequest)
-	router.GET("/*servicePath", s.handleGatewayRequest)
+	router.POST("/:servicePath/:serviceMethod", s.handleGatewayRequest)
+	router.GET("/:servicePath/:serviceMethod", s.handleGatewayRequest)
 	if err := http.ListenAndServe(s.gateWayAddr, router); err != nil {
 		log.Panicf("error in gateway Serve: %s", err)
 	}
 }
 
 func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	if r.Header.Get(EmServicePath) == "" {
-		servicePath := params.ByName("servicePath")
-		if strings.HasPrefix(servicePath, "/") {
-			servicePath = servicePath[1:]
-		}
-		r.Header.Set(EmServicePath, servicePath)
-	}
-	servicePath := r.Header.Get(EmServicePath)
+	var err error
+	var req *protocol.Message
 	wh := w.Header()
-	req, err := HTTPRequest2EmRpcRequest(r)
-	defer protocol.FreeMsg(req)
-
 	//set headers
-	wh.Set(EmVersion, r.Header.Get(EmVersion))
-	wh.Set(EmMessageID, r.Header.Get(EmMessageID))
+	switch {
+	default:
+		version := r.Header.Get(EmVersion)
+		wh.Set(EmVersion, version)
 
-	if err == nil && servicePath == "" {
-		err = errors.New("empty servicepath")
-	} else {
+		messageId := r.Header.Get(EmMessageID)
+		wh.Set(EmMessageID, messageId)
+
+		servicePath := params.ByName("servicePath")
+		if servicePath == "" {
+			err = errors.New("empty servicepath")
+			break
+		}
+
 		wh.Set(EmServicePath, servicePath)
-	}
+		serviceMethod := params.ByName("serviceMethod")
+		if serviceMethod == "" {
+			err = errors.New("empty servicemethod")
+			break
+		}
+		wh.Set(EmServiceMethod, serviceMethod)
 
-	if err == nil && r.Header.Get(EmServiceMethod) == "" {
-		err = errors.New("empty servicemethod")
-	} else {
-		wh.Set(EmServiceMethod, r.Header.Get(EmServiceMethod))
-	}
-
-	if err == nil && r.Header.Get(EmSerializeType) == "" {
-		err = errors.New("empty serialized type")
-	} else {
+		serializedType := r.Header.Get(EmSerializeType)
+		if serializedType == "" {
+			err = errors.New("empty serialized type")
+			break
+		}
+		serializedTypeInt, err := strconv.Atoi(serializedType)
+		if err != nil {
+			err = errors.New("invalid serialized type")
+			break
+		}
 		wh.Set(EmSerializeType, r.Header.Get(EmSerializeType))
+
+		messageIdInt, err := strconv.ParseUint(messageId, 10, 64)
+		if err != nil {
+			err = errors.New("invalid message id")
+			break
+		}
+
+		req, err = HTTPRequest2EmRpcRequest(r)
+		if err != nil {
+			break
+		}
+
+		req.SetSeq(messageIdInt)
+		req.SetSerializeType(protocol.SerializeType(serializedTypeInt))
+		req.ServicePath = strings.ToLower(servicePath)
+		req.ServiceMethod = strings.ToLower(serviceMethod)
+		defer protocol.FreeMsg(req)
 	}
 
 	if err != nil {
@@ -104,10 +126,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 
 		wh.Set(EmMessageStatusType, "Error")
 		wh.Set(EmErrorMessage, err.Error())
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+		w.WriteHeader(400)
 		return
 	}
 
@@ -148,15 +167,6 @@ func HTTPRequest2EmRpcRequest(r *http.Request) (*protocol.Message, error) {
 	req.SetMessageType(protocol.Request)
 
 	h := r.Header
-	seq := h.Get(EmMessageID)
-	if seq != "" {
-		id, err := strconv.ParseUint(seq, 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		req.SetSeq(id)
-	}
-
 	heartbeat := h.Get(EmHeartbeat)
 	if heartbeat != "" {
 		req.SetHeartbeat(true)
@@ -165,15 +175,6 @@ func HTTPRequest2EmRpcRequest(r *http.Request) (*protocol.Message, error) {
 	oneway := h.Get(EmOneway)
 	if oneway != "" {
 		req.SetOneway(true)
-	}
-
-	st := h.Get(EmSerializeType)
-	if st != "" {
-		rst, err := strconv.Atoi(st)
-		if err != nil {
-			return nil, err
-		}
-		req.SetSerializeType(protocol.SerializeType(rst))
 	}
 
 	meta := h.Get(EmMeta)
@@ -199,22 +200,11 @@ func HTTPRequest2EmRpcRequest(r *http.Request) (*protocol.Message, error) {
 		req.Metadata[share.AuthKey] = auth
 	}
 
-	sp := h.Get(EmServicePath)
-	if sp != "" {
-		req.ServicePath = sp
-	}
-
-	sm := h.Get(EmServiceMethod)
-	if sm != "" {
-		req.ServiceMethod = sm
-	}
-
 	payload, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	req.Payload = payload
-
 	return req, nil
 }

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -460,7 +461,7 @@ func (client *RPCClient) Go(ctx context.Context, serviceMethod string, args inte
 	call.ctx = ctx
 	call.Args = args
 	call.Reply = reply
-	call.serializeType = protocol.JSON
+	call.serializeType = protocol.MsgPack
 	for _, opt := range options {
 		if opt.after {
 			call.AfterCalls = append(call.AfterCalls, opt.option)
@@ -525,7 +526,7 @@ func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
 	client := &RPCClient{
 		network:           network,
 		address:           address,
-		servicePath:       servicePath,
+		servicePath:       strings.ToLower(servicePath),
 		conn:              conn,
 		pending:           make(map[uint64]*Call),
 		heartBeatInterval: defHeatBeatInterval,

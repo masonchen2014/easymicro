@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -128,8 +129,7 @@ func (server *Server) register(rcvr interface{}, name string, useName bool) erro
 		}
 		return errors.New(str)
 	}
-
-	server.serviceMap[sname] = s
+	server.serviceMap[strings.ToLower(sname)] = s
 	return nil
 }
 
@@ -197,7 +197,7 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			}
 			continue
 		}
-		methods[mname] = &methodType{method: method, ArgType: argType, ReplyType: replyType}
+		methods[strings.ToLower(mname)] = &methodType{method: method, ArgType: argType, ReplyType: replyType}
 	}
 	return methods
 }
@@ -222,11 +222,6 @@ func (server *Server) Serve(network, address string) {
 	ln, err := net.Listen(network, address)
 	if err != nil {
 		log.Fatal("listen error:", err)
-	}
-
-	//rpc over http
-	if network == "http" {
-
 	}
 
 	if server.discovery != nil {
@@ -319,6 +314,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	serviceName := req.ServicePath
 	methodName := req.ServiceMethod
 
+	log.Infof("serviceName %s serviceMethod %s for req %+v", serviceName, methodName, req)
 	res = req.Clone()
 	res.SetMessageType(protocol.Response)
 
@@ -343,6 +339,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 		return handleError(res, err)
 	}
 
+	log.Debugf("codec is %+v", codec)
 	err = codec.Decode(req.Payload, argv)
 	if err != nil {
 		argsReplyPools.Put(mtype.ArgType, argv)

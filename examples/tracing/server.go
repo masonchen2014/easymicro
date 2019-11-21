@@ -38,7 +38,7 @@ func init() {
 }
 
 func doSomething() {
-
+	
 }
 
 func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
