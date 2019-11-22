@@ -91,15 +91,15 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 			err = errors.New("empty serialized type")
 			break
 		}
-		serializedTypeInt, err := strconv.Atoi(serializedType)
-		if err != nil {
+		serializedTypeInt, e := strconv.Atoi(serializedType)
+		if e != nil {
 			err = errors.New("invalid serialized type")
 			break
 		}
 		wh.Set(EmSerializeType, r.Header.Get(EmSerializeType))
 
-		messageIdInt, err := strconv.ParseUint(messageId, 10, 64)
-		if err != nil {
+		messageIdInt, e := strconv.ParseUint(messageId, 10, 64)
+		if e != nil {
 			err = errors.New("invalid message id")
 			break
 		}
@@ -115,7 +115,6 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 		req.ServiceMethod = strings.ToLower(serviceMethod)
 		defer protocol.FreeMsg(req)
 	}
-
 	if err != nil {
 		rh := r.Header
 		for k, v := range rh {
