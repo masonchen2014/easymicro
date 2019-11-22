@@ -29,7 +29,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 func main() {
 	cli, err := client.NewDiscoveryClient("Arith", dis.NewEtcdDiscoveryMaster([]string{
 		"http://127.0.0.1:22379",
-	}, "services/Arith/"))
+	}, "Arith"))
 
 	if err != nil {
 		panic(err)

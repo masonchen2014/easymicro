@@ -1,51 +1,67 @@
-package server
+package gateway
 
 import (
 	"context"
 	"errors"
-	"io"
-	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/julienschmidt/httprouter"
+	dis "github.com/masonchen2014/easymicro/discovery"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
+	"github.com/masonchen2014/easymicro/server"
 	"github.com/masonchen2014/easymicro/share"
-	"github.com/soheilhy/cmux"
 )
 
-func (s *Server) startGateway(ln net.Listener) net.Listener {
-	m := cmux.New(ln)
-	eLn := m.Match(easyMicroPrefixByteMatcher())
-	httpLn := m.Match(cmux.HTTP1Fast())
-	go s.startHTTP1APIGateway(httpLn)
-	go m.Serve()
-	return eLn
+type Gateway struct {
+	addr          string
+	discoveryEnds []string
+	rwmutex       sync.RWMutex
+	clientMap     map[string]*Client
 }
 
-func easyMicroPrefixByteMatcher() cmux.Matcher {
-	magic := protocol.MagicNumber()
-	return func(r io.Reader) bool {
-		buf := make([]byte, 1)
-		n, _ := r.Read(buf)
-		return n == 1 && buf[0] == magic
+func NewGateway(laddr string, ends []string) *Gateway {
+	return &Gateway{
+		addr:          laddr,
+		discoveryEnds: ends,
+		clientMap:     make(map[string]*Client),
 	}
 }
 
-func (s *Server) startHTTP1APIGateway(ln net.Listener) {
+func (gw *Gateway) StartGateway() {
 	router := httprouter.New()
-	router.POST("/:servicePath/:serviceMethod", s.handleGatewayRequest)
-	router.GET("/:servicePath/:serviceMethod", s.handleGatewayRequest)
-	if err := http.ListenAndServe(s.gateWayAddr, router); err != nil {
+	router.POST("/:servicePath/:serviceMethod", gw.handleRequest)
+	router.GET("/:servicePath/:serviceMethod", gw.handleRequest)
+	if err := http.ListenAndServe(gw.addr, router); err != nil {
 		log.Panicf("error in gateway Serve: %s", err)
 	}
 }
 
-func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (gw *Gateway) GetClient(service string) (*Client, error) {
+	var c *Client
+	gw.rwmutex.RLock()
+	c = gw.clientMap[service]
+	gw.rwmutex.RUnlock()
+
+	if c == nil {
+		client, err := NewDiscoveryClient(service, dis.NewEtcdDiscoveryMaster(gw.discoveryEnds, service))
+		if err != nil {
+			return nil, err
+		}
+		c = client
+		gw.rwmutex.Lock()
+		gw.clientMap[service] = c
+		gw.rwmutex.Unlock()
+	}
+
+	return c, nil
+}
+
+func (gw *Gateway) handleRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	var err error
 	var req *protocol.Message
 	wh := w.Header()
@@ -90,7 +106,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 			break
 		}
 
-		req, err = HTTPRequest2EmRpcRequest(r)
+		req, err = server.HTTPRequest2EmRpcRequest(r)
 		if err != nil {
 			break
 		}
@@ -101,6 +117,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 		req.ServiceMethod = strings.ToLower(serviceMethod)
 		defer protocol.FreeMsg(req)
 	}
+
 	if err != nil {
 		rh := r.Header
 		for k, v := range rh {
@@ -116,8 +133,16 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	}
 
 	resMetadata := make(map[string]string)
-	newCtx, err := extractClientMdContexFromMd(context.Background(), req.Metadata)
-	res, err := s.handleRequest(newCtx, req)
+	client, err := gw.GetClient(req.ServicePath)
+	if err != nil {
+		log.Warnf("easymicro: failed to get %s client: %v", req.ServicePath, err)
+		wh.Set(share.EmMessageStatusType, "Error")
+		wh.Set(share.EmErrorMessage, err.Error())
+		w.WriteHeader(500)
+		return
+	}
+
+	res, err := client.Call(context.Background(), req.ServicePath, req)
 	defer protocol.FreeMsg(res)
 
 	if err != nil {
@@ -145,51 +170,4 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	}
 	wh.Set(share.EmMeta, meta.Encode())
 	w.Write(res.Payload)
-}
-
-func HTTPRequest2EmRpcRequest(r *http.Request) (*protocol.Message, error) {
-	req := protocol.GetPooledMsg()
-	req.SetMessageType(protocol.Request)
-
-	h := r.Header
-	heartbeat := h.Get(share.EmHeartbeat)
-	if heartbeat != "" {
-		req.SetHeartbeat(true)
-	}
-
-	oneway := h.Get(share.EmOneway)
-	if oneway != "" {
-		req.SetOneway(true)
-	}
-
-	meta := h.Get(share.EmMeta)
-	if meta != "" {
-		metadata, err := url.ParseQuery(meta)
-		if err != nil {
-			return nil, err
-		}
-		mm := make(map[string]string)
-		for k, v := range metadata {
-			if len(v) > 0 {
-				mm[k] = v[0]
-			}
-		}
-		req.Metadata = mm
-	}
-
-	auth := h.Get("Authorization")
-	if auth != "" {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string)
-		}
-		req.Metadata[share.AuthKey] = auth
-	}
-
-	payload, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Payload = payload
-	return req, nil
 }

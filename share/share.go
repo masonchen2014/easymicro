@@ -17,6 +17,18 @@ const (
 	FieldNameTraceID      = PrefixTracerState + "traceid"
 	FieldNameSpanID       = PrefixTracerState + "spanid"
 	FieldNameSampled      = PrefixTracerState + "sampled"
+
+	EmVersion           = "Easymicro-Version"
+	EmMessageType       = "Easymicro-MesssageType"
+	EmHeartbeat         = "Easymicro-Heartbeat"
+	EmOneway            = "Easymicro-Oneway"
+	EmMessageStatusType = "Easymicro-MessageStatusType"
+	EmSerializeType     = "Easymicro-SerializeType"
+	EmMessageID         = "Easymicro-MessageID"
+	EmServicePath       = "Easymicro-ServicePath"
+	EmServiceMethod     = "Easymicro-ServiceMethod"
+	EmMeta              = "Easymicro-Meta"
+	EmErrorMessage      = "Easymicro-ErrorMessage"
 )
 
 var (

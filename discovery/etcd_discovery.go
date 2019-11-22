@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -109,7 +110,7 @@ type Node struct {
 	Info *ServiceInfo
 }
 
-func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) *EtcdDiscoveryMaster {
+func NewEtcdDiscoveryMaster(endpoints []string, serviceName string) *EtcdDiscoveryMaster {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: time.Second,
@@ -120,7 +121,7 @@ func NewEtcdDiscoveryMaster(endpoints []string, watchPath string) *EtcdDiscovery
 	}
 
 	master := &EtcdDiscoveryMaster{
-		Path:   watchPath,
+		Path:   strings.ToLower(share.BaseServicesPath + serviceName + "/"),
 		Nodes:  make(map[string]*Node),
 		Client: cli,
 	}

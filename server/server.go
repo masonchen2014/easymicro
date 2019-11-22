@@ -237,7 +237,7 @@ func (server *Server) Serve(network, address string) {
 			server.wg.Add(1)
 			server.discovery.Register(&discovery.ServiceInfo{
 				Network: network,
-				Name:    server.name,
+				Name:    strings.ToLower(server.name),
 				Addr:    server.advertiseUrl,
 			})
 		}()
