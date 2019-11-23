@@ -130,7 +130,7 @@ func (client *Client) selectRPCClient() (*RPCClient, error) {
 	client.mu.RLock()
 	rpcClient = client.cachedClient[selectedNode.Addr]
 	client.mu.RUnlock()
-	if rpcClient == nil {
+	if rpcClient == nil || rpcClient.closed {
 		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, client.servicePath)
 		if err != nil {
 			return nil, err

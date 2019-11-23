@@ -18,6 +18,10 @@ type Reply struct {
 type Arith int
 
 func (t *Arith) Plus(ctx context.Context, args *Args, reply *Reply) error {
+	server.SendMetaData(ctx, map[string]string{
+		"server":  "hi this is server md",
+		"server2": "context",
+	})
 	reply.C = args.A + args.B
 	return nil
 }
