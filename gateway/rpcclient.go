@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/masonchen2014/easymicro/log"
@@ -182,13 +183,13 @@ func (client *RPCClient) send(call *Call) {
 		return
 	}
 
-	//seq := atomic.AddUint64(&client.seq, 1)
-	seq := call.Req.Seq()
+	seq := atomic.AddUint64(&client.seq, 1)
 	client.pending[seq] = call
 	client.lastSend = time.Now().Unix()
 	rawConn := client.conn
 	client.mutex.Unlock()
 
+	call.Req.SetSeq(seq)
 	_, err := rawConn.Write(call.Req.Encode())
 	if err != nil {
 		client.mutex.Lock()
@@ -287,6 +288,7 @@ func (client *RPCClient) input() {
 		delete(client.pending, seq)
 		client.mutex.Unlock()
 
+		call.Reply = resp
 		if resp.IsHeartbeat() {
 			call.done()
 			continue

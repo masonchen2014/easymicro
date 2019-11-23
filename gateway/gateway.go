@@ -71,9 +71,6 @@ func (gw *Gateway) handleRequest(w http.ResponseWriter, r *http.Request, params 
 		version := r.Header.Get(share.EmVersion)
 		wh.Set(share.EmVersion, version)
 
-		messageId := r.Header.Get(share.EmMessageID)
-		wh.Set(share.EmMessageID, messageId)
-
 		servicePath := params.ByName("servicePath")
 		if servicePath == "" {
 			err = errors.New("empty servicepath")
@@ -100,18 +97,11 @@ func (gw *Gateway) handleRequest(w http.ResponseWriter, r *http.Request, params 
 		}
 		wh.Set(share.EmSerializeType, r.Header.Get(share.EmSerializeType))
 
-		messageIdInt, e := strconv.ParseUint(messageId, 10, 64)
-		if e != nil {
-			err = errors.New("invalid message id")
-			break
-		}
-
 		req, err = server.HTTPRequest2EmRpcRequest(r)
 		if err != nil {
 			break
 		}
 
-		req.SetSeq(messageIdInt)
 		req.SetSerializeType(protocol.SerializeType(serializedTypeInt))
 		req.ServicePath = strings.ToLower(servicePath)
 		req.ServiceMethod = strings.ToLower(serviceMethod)
@@ -132,7 +122,6 @@ func (gw *Gateway) handleRequest(w http.ResponseWriter, r *http.Request, params 
 		return
 	}
 
-	resMetadata := make(map[string]string)
 	client, err := gw.GetClient(req.ServicePath)
 	if err != nil {
 		log.Warnf("easymicro: failed to get %s client: %v", req.ServicePath, err)
@@ -153,15 +142,8 @@ func (gw *Gateway) handleRequest(w http.ResponseWriter, r *http.Request, params 
 		return
 	}
 
-	if len(resMetadata) > 0 { //copy meta in context to request
-		meta := res.Metadata
-		if meta == nil {
-			res.Metadata = resMetadata
-		} else {
-			for k, v := range resMetadata {
-				meta[k] = v
-			}
-		}
+	if res.Metadata == nil {
+		res.Metadata = make(map[string]string)
 	}
 
 	meta := url.Values{}

@@ -115,7 +115,6 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 
-	resMetadata := make(map[string]string)
 	newCtx, err := extractClientMdContexFromMd(context.Background(), req.Metadata)
 	res, err := s.handleRequest(newCtx, req)
 	defer protocol.FreeMsg(res)
@@ -128,15 +127,8 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 
-	if len(resMetadata) > 0 { //copy meta in context to request
-		meta := res.Metadata
-		if meta == nil {
-			res.Metadata = resMetadata
-		} else {
-			for k, v := range resMetadata {
-				meta[k] = v
-			}
-		}
+	if res.Metadata == nil {
+		res.Metadata = make(map[string]string)
 	}
 
 	meta := url.Values{}

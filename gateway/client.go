@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -75,32 +76,40 @@ type Client struct {
 	bucket  *ratelimit.Bucket
 }
 
-func (client *Client) Call(ctx context.Context, serviceMethod string, req *protocol.Message) (*protocol.Message, error) {
-	if client.bucket != nil {
-		client.bucket.Wait(1)
+func (c *Client) Call(ctx context.Context, serviceMethod string, req *protocol.Message) (*protocol.Message, error) {
+	if c.bucket != nil {
+		c.bucket.Wait(1)
 	}
-	if client.breaker != nil {
-		_, err := client.breaker.Execute(func() (interface{}, error) {
-			rpcClient, err := client.selectRPCClient()
+	if c.breaker != nil {
+		reply, err := c.breaker.Execute(func() (interface{}, error) {
+			rpcClient, err := c.selectRPCClient()
 			if err != nil {
 				log.Errorf("select rpc client failed for err %v", err)
 				return nil, err
 			}
 			return rpcClient.Call(ctx, strings.ToLower(serviceMethod), req)
 		})
-		return nil, err
+
+		if err != nil {
+			return nil, err
+		}
+		replyMsg, b := reply.(*protocol.Message)
+		if !b {
+			return nil, errors.New("invalid reply")
+		}
+		return replyMsg, nil
 	} else {
-		rpcClient, err := client.selectRPCClient()
+		rpcClient, err := c.selectRPCClient()
 		if err != nil {
 			log.Errorf("select rpc client failed for err %v", err)
-			return nil, nil
+			return nil, err
 		}
 		return rpcClient.Call(ctx, strings.ToLower(serviceMethod), req)
 	}
 }
 
-func (client *Client) Go(ctx context.Context, serviceMethod string, req *protocol.Message, done chan *Call) *Call {
-	rpcClient, err := client.selectRPCClient()
+func (c *Client) Go(ctx context.Context, serviceMethod string, req *protocol.Message, done chan *Call) *Call {
+	rpcClient, err := c.selectRPCClient()
 	if err != nil {
 		log.Errorf("select rpc client failed for err %v", err)
 		return nil
@@ -108,31 +117,31 @@ func (client *Client) Go(ctx context.Context, serviceMethod string, req *protoco
 	return rpcClient.Go(ctx, serviceMethod, req, done)
 }
 
-func (client *Client) selectRPCClient() (*RPCClient, error) {
-	if client.discovery == nil {
-		return client.defaultRPCClient, nil
+func (c *Client) selectRPCClient() (*RPCClient, error) {
+	if c.discovery == nil {
+		return c.defaultRPCClient, nil
 	}
 	var rpcClient *RPCClient
-	nodes := client.discovery.GetAllNodes()
+	nodes := c.discovery.GetAllNodes()
 	if len(nodes) <= 0 {
 		return nil, fmt.Errorf("no avaliable worker nodes")
 	}
-	selectedNode := client.selector.Pick(nodes)
+	selectedNode := c.selector.Pick(nodes)
 	if selectedNode == nil {
 		return nil, fmt.Errorf("not avaliable worker node")
 	}
-	client.mu.RLock()
-	rpcClient = client.cachedClient[selectedNode.Addr]
-	client.mu.RUnlock()
+	c.mu.RLock()
+	rpcClient = c.cachedClient[selectedNode.Addr]
+	c.mu.RUnlock()
 	if rpcClient == nil {
-		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, client.servicePath)
+		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath)
 		if err != nil {
 			return nil, err
 		}
 		rpcClient = rCli
-		client.mu.Lock()
-		client.cachedClient[selectedNode.Addr] = rpcClient
-		client.mu.Unlock()
+		c.mu.Lock()
+		c.cachedClient[selectedNode.Addr] = rpcClient
+		c.mu.Unlock()
 	}
 	return rpcClient, nil
 }
