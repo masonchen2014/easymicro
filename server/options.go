@@ -46,7 +46,7 @@ type Option struct {
 }
 
 var defaultOption = &Option{
-	MaxConnIdleTime: 10,
-	JobChanSize:     200,
-	WorkerNum:       100,
+	MaxConnIdleTime: 1000,
+	JobChanSize:     10000,
+	WorkerNum:       500,
 }

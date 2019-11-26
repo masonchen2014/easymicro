@@ -314,7 +314,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 	serviceName := req.ServicePath
 	methodName := req.ServiceMethod
 
-	log.Infof("serviceName %s serviceMethod %s for req %+v", serviceName, methodName, req)
+	//log.Infof("serviceName %s serviceMethod %s for req %+v", serviceName, methodName, req)
 	res = req.Clone()
 	res.SetMessageType(protocol.Response)
 
@@ -339,7 +339,7 @@ func (server *Server) handleRequest(ctx context.Context, req *protocol.Message) 
 		return handleError(res, err)
 	}
 
-	log.Debugf("codec is %+v", codec)
+	//	log.Debugf("codec is %+v", codec)
 	err = codec.Decode(req.Payload, argv)
 	if err != nil {
 		argsReplyPools.Put(mtype.ArgType, argv)
@@ -423,7 +423,7 @@ func (server *Server) startWorkers() {
 			for {
 				select {
 				case job := <-server.jobChan:
-					log.Debugf("goroutine %d get job %+v", goNum, job)
+					//log.Debugf("goroutine %d get job %+v", goNum, job)
 					ctx, err := extractClientMdContexFromMd(job.ctx, job.req.Metadata)
 					if err != nil {
 						log.Errorf("ExtractClientMdContexFromMd error %v", err)

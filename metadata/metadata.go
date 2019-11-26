@@ -22,7 +22,7 @@ func New(m map[string]string) map[string]string {
 // NewClientMdContext creates a new context with client md attached.
 func NewClientMdContext(ctx context.Context, md map[string]string) context.Context {
 	return context.WithValue(ctx, share.ReqMetaDataKey{}, md)
-}
+} 
 
 // FromClientMdContext get  md from client context.
 func FromClientMdContext(ctx context.Context) (md map[string]string, ok bool) {

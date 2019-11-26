@@ -87,13 +87,12 @@ func (ec *easyConn) serveConn() {
 		}
 
 		if req.IsHeartbeat() {
-			log.Debugf("server receives heartbeat at time %d", time.Now().Unix())
+			//log.Debugf("server receives heartbeat at time %d", time.Now().Unix())
 			req.SetMessageType(protocol.Response)
 			ec.writeResponse(req)
 			protocol.FreeMsg(req)
 			continue
 		}
-		log.Debugf("readRequest req %+v", req)
 		ctx := context.WithValue(context.Background(), ConnDataKey{}, ec)
 		ec.server.jobChan <- &workerJob{
 			ctx:  ctx,

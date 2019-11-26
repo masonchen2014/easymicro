@@ -81,8 +81,8 @@ type RPCClient struct {
 	seq      uint64
 	pending  map[uint64]*Call
 	lastSend int64
-	closed   bool
-	closing  bool
+	status   ConnStatus
+	suicide  bool
 	//shutdown bool // server has told us to stop
 	doneChan chan struct{}
 }
@@ -124,12 +124,11 @@ func (client *RPCClient) sendHeartBeat() error {
 
 func (client *RPCClient) reconnect() error {
 	client.mutex.Lock()
-	if client.closed {
-		//do nothing
+	if client.suicide {
 		client.mutex.Unlock()
 		return ErrShutdown
 	}
-	client.closing = true
+	client.status = ConnReconnect
 	client.mutex.Unlock()
 
 	reconnectTryNums := int(client.reconnectTryNums)
@@ -160,13 +159,17 @@ func (client *RPCClient) reconnect() error {
 	}
 
 	if err != nil {
+		client.mutex.Lock()
+		client.status = ConnReconnectFail
+		client.suicide = false
+		client.mutex.Unlock()
 		return err
 	}
 
 	client.mutex.Lock()
 	client.conn = conn
-	client.closing = false
-	client.closed = false
+	client.status = ConnAvailable
+	client.suicide = false
 	client.mutex.Unlock()
 	log.Infof("client reconnect success")
 	return nil
@@ -176,7 +179,7 @@ func (client *RPCClient) send(call *Call) {
 
 	// Register this call.
 	client.mutex.Lock()
-	if client.closed || client.closing {
+	if client.status != ConnAvailable {
 		client.mutex.Unlock()
 		call.Error = ErrShutdown
 		call.done()
@@ -217,7 +220,7 @@ func (client *RPCClient) keepalive() {
 			//examine lastSend
 			nextKaInterval := client.heartBeatInterval
 			client.mutex.Lock()
-			if client.closed || client.closing {
+			if client.status != ConnAvailable {
 				client.mutex.Unlock()
 				timer.Reset(time.Duration(nextKaInterval) * time.Second)
 				continue
@@ -232,8 +235,9 @@ func (client *RPCClient) keepalive() {
 				//here send heart beat
 				if err := client.sendHeartBeat(); err != nil {
 					client.mutex.Lock()
-					if !client.closed && !client.closing {
-						client.closing = true
+					if client.status == ConnAvailable {
+						client.suicide = true
+						client.status = ConnClose
 						client.conn.Close()
 					}
 					client.mutex.Unlock()
@@ -254,8 +258,8 @@ func (client *RPCClient) Close() {
 func (client *RPCClient) close(err error) {
 	// Terminate pending calls.
 	client.mutex.Lock()
-	if !client.closed {
-		client.closed = true
+	if client.status != ConnClose {
+		client.status = ConnClose
 		for _, call := range client.pending {
 			call.Error = err
 			call.done()
@@ -263,6 +267,7 @@ func (client *RPCClient) close(err error) {
 		client.conn.Close()
 		close(client.doneChan)
 	}
+
 	client.mutex.Unlock()
 }
 
@@ -270,7 +275,7 @@ func (client *RPCClient) input() {
 	var err error
 	resp := protocol.NewMessage()
 
-	for err == nil {
+	for {
 		_, err = client.readResponse(resp)
 		if err != nil {
 			log.Errorf("readResponse error %+v", err)

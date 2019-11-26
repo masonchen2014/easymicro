@@ -29,6 +29,15 @@ const (
 	defHeatBeatInterval = 5
 )
 
+type ConnStatus int
+
+const (
+	ConnAvailable ConnStatus = iota
+	ConnClose
+	ConnReconnect
+	ConnReconnectFail
+)
+
 // ServerError represents an error that has been returned from
 // the remote side of the RPC connection.
 type ServerError string
@@ -81,8 +90,11 @@ type RPCClient struct {
 	seq      uint64
 	pending  map[uint64]*Call
 	lastSend int64
-	closed   bool
-	closing  bool
+	status   ConnStatus
+	suicide  bool
+
+	//closed  bool
+	//closing bool
 	//shutdown bool // server has told us to stop
 	doneChan chan struct{}
 }
@@ -159,12 +171,11 @@ func (client *RPCClient) sendHeartBeat() error {
 
 func (client *RPCClient) reconnect() error {
 	client.mutex.Lock()
-	if client.closed {
-		//do nothing
+	if client.suicide {
 		client.mutex.Unlock()
 		return ErrShutdown
 	}
-	client.closing = true
+	client.status = ConnReconnect
 	client.mutex.Unlock()
 
 	reconnectTryNums := int(client.reconnectTryNums)
@@ -195,13 +206,17 @@ func (client *RPCClient) reconnect() error {
 	}
 
 	if err != nil {
+		client.mutex.Lock()
+		client.status = ConnReconnectFail
+		client.suicide = false
+		client.mutex.Unlock()
 		return err
 	}
 
 	client.mutex.Lock()
 	client.conn = conn
-	client.closing = false
-	client.closed = false
+	client.status = ConnAvailable
+	client.suicide = false
 	client.mutex.Unlock()
 	log.Infof("client reconnect success")
 	return nil
@@ -211,7 +226,7 @@ func (client *RPCClient) send(call *Call) {
 
 	// Register this call.
 	client.mutex.Lock()
-	if client.closed || client.closing {
+	if client.status != ConnAvailable {
 		client.mutex.Unlock()
 		call.Error = ErrShutdown
 		call.done()
@@ -264,7 +279,7 @@ func (client *RPCClient) keepalive() {
 			//examine lastSend
 			nextKaInterval := client.heartBeatInterval
 			client.mutex.Lock()
-			if client.closed || client.closing {
+			if client.status != ConnAvailable {
 				client.mutex.Unlock()
 				timer.Reset(time.Duration(nextKaInterval) * time.Second)
 				continue
@@ -279,8 +294,10 @@ func (client *RPCClient) keepalive() {
 				//here send heart beat
 				if err := client.sendHeartBeat(); err != nil {
 					client.mutex.Lock()
-					if !client.closed && !client.closing {
-						client.closing = true
+					if client.status == ConnAvailable {
+						log.Errorf("set client conn close at heart beat")
+						client.suicide = true
+						client.status = ConnClose
 						client.conn.Close()
 					}
 					client.mutex.Unlock()
@@ -295,14 +312,15 @@ func (client *RPCClient) keepalive() {
 }
 
 func (client *RPCClient) Close() {
-	client.close(ErrShutdown)
+	client.close(ErrShutdown, true)
 }
 
-func (client *RPCClient) close(err error) {
+func (client *RPCClient) close(err error, suicide bool) {
 	// Terminate pending calls.
 	client.mutex.Lock()
-	if !client.closed {
-		client.closed = true
+	if client.status != ConnClose {
+		client.status = ConnClose
+		client.suicide = suicide
 		for _, call := range client.pending {
 			call.Error = err
 			call.done()
@@ -310,6 +328,7 @@ func (client *RPCClient) close(err error) {
 		client.conn.Close()
 		close(client.doneChan)
 	}
+
 	client.mutex.Unlock()
 }
 
@@ -317,10 +336,13 @@ func (client *RPCClient) input() {
 	var err error
 	resp := protocol.NewMessage()
 
-	for err == nil {
+	for {
 		_, err = client.readResponse(resp)
 		if err != nil {
-			log.Errorf("readResponse error %+v", err)
+			if client.suicide {
+				break
+			}
+			log.Errorf("readResponse error %+v client %+v", err, client)
 			err = client.reconnect()
 			if err != nil {
 				break
@@ -373,7 +395,11 @@ func (client *RPCClient) input() {
 		}
 	}
 
-	client.close(err)
+	client.mutex.Lock()
+	if client.status == ConnReconnectFail {
+		client.close(err, false)
+	}
+	client.mutex.Unlock()
 	log.Infof("client input goroutine exit")
 }
 
@@ -433,7 +459,7 @@ func DialHTTPPath(network, address, path string) (net.Conn, error) {
 
 // Dial connects to an RPC server at the specified network address.
 func Dial(network, address string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, address, 3*time.Second)
+	conn, err := net.DialTimeout(network, address, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +560,7 @@ func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
 	}
 
 	go client.input()
-	go client.keepalive()
+	//go client.keepalive()
 	return client, nil
 }
 
