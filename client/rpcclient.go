@@ -560,7 +560,7 @@ func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
 	}
 
 	go client.input()
-	//go client.keepalive()
+	go client.keepalive()
 	return client, nil
 }
 
