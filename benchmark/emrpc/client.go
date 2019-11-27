@@ -13,6 +13,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	benchmark "github.com/masonchen2014/easymicro/benchmark/emrpc/pb"
 	"github.com/masonchen2014/easymicro/client"
+	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/montanaflynn/stats"
 
 	"golang.org/x/net/context"
@@ -65,7 +66,7 @@ func main() {
 			for j := 0; j < m; j++ {
 				reply := &benchmark.BenchmarkMessage{}
 				t := time.Now().UnixNano()
-				c.Call(context.Background(), "say", args, reply)
+				c.Call(context.Background(), "say", args, reply, client.SetCallSerializeType(protocol.ProtoBuffer))
 				t = time.Now().UnixNano() - t
 
 				d[i] = append(d[i], t)
