@@ -47,7 +47,6 @@ type Server struct {
 	advertiseUrl    string
 	wg              sync.WaitGroup
 	useGateWay      bool
-	gateWayAddr     string
 }
 
 var (

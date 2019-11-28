@@ -31,10 +31,9 @@ func SetBasicOption(opt Option) ServerOption {
 	}
 }
 
-func SetGateWayMode(gatewayUrl string) ServerOption {
+func SetGateWayMode() ServerOption {
 	return func(s *Server) error {
 		s.useGateWay = true
-		s.gateWayAddr = gatewayUrl
 		return nil
 	}
 }

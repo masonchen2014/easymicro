@@ -27,7 +27,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	s := server.NewServer(server.SetGateWayMode(":8888"))
+	s := server.NewServer(server.SetGateWayMode())
 	s.RegisterName("Arith", new(Arith))
 	s.Serve("tcp", ":8972")
 	//	s.Register(new(Arith), "")

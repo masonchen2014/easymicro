@@ -40,7 +40,7 @@ func (s *Server) startHTTP1APIGateway(ln net.Listener) {
 	router := httprouter.New()
 	router.POST("/:servicePath/:serviceMethod", s.handleGatewayRequest)
 	router.GET("/:servicePath/:serviceMethod", s.handleGatewayRequest)
-	if err := http.ListenAndServe(s.gateWayAddr, router); err != nil {
+	if err := http.Serve(ln, router); err != nil {
 		log.Panicf("error in gateway Serve: %s", err)
 	}
 }
