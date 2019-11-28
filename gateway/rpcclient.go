@@ -469,6 +469,7 @@ func NewRPCClient(network, address, servicePath string, dialTimeout time.Duratio
 		pending:           make(map[uint64]*Call),
 		heartBeatInterval: defHeatBeatInterval,
 		doneChan:          make(chan struct{}),
+		DialTimeout:       dialTimeout,
 	}
 
 	go client.input()
