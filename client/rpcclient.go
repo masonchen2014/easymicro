@@ -93,6 +93,7 @@ type RPCClient struct {
 	status   ConnStatus
 	suicide  bool
 
+	DialTimeout time.Duration
 	//closed  bool
 	//closing bool
 	//shutdown bool // server has told us to stop
@@ -189,9 +190,9 @@ func (client *RPCClient) reconnect() error {
 	for i := 1; i <= reconnectTryNums; i++ {
 		log.Infof("client reconnect for %d time at time %d", i, time.Now().Unix())
 		if client.network == "tcp" {
-			conn, err = Dial(client.network, client.address)
+			conn, err = Dial(client.network, client.address, client.DialTimeout)
 		} else if client.network == "http" {
-			conn, err = DialHTTP(client.network, client.address)
+			conn, err = DialHTTP(client.network, client.address, client.DialTimeout)
 		}
 		if err != nil {
 			log.Errorf("client reconnect error %+v", err)
@@ -425,15 +426,20 @@ func checkReplyError(reply *protocol.Message) error {
 
 // DialHTTP connects to an HTTP RPC server at the specified network address
 // listening on the default HTTP RPC path.
-func DialHTTP(network, address string) (net.Conn, error) {
-	return DialHTTPPath(network, address, DefaultRPCPath)
+func DialHTTP(network, address string, timeout time.Duration) (net.Conn, error) {
+	return DialHTTPPath(network, address, DefaultRPCPath, timeout)
 }
 
 // DialHTTPPath connects to an HTTP RPC server
 // at the specified network address and path.
-func DialHTTPPath(network, address, path string) (net.Conn, error) {
+func DialHTTPPath(network, address, path string, timeout time.Duration) (net.Conn, error) {
+	var conn net.Conn
 	var err error
-	conn, err := net.DialTimeout(network, address, 3*time.Second)
+	if timeout > 0 {
+		conn, err = net.DialTimeout(network, address, timeout)
+	} else {
+		conn, err = net.Dial(network, address)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -458,8 +464,14 @@ func DialHTTPPath(network, address, path string) (net.Conn, error) {
 }
 
 // Dial connects to an RPC server at the specified network address.
-func Dial(network, address string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, address, 10*time.Second)
+func Dial(network, address string, timeout time.Duration) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+	if timeout > 0 {
+		conn, err = net.DialTimeout(network, address, timeout)
+	} else {
+		conn, err = net.Dial(network, address)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -531,17 +543,17 @@ func (client *RPCClient) Call(ctx context.Context, serviceMethod string, args in
 // so no interlocking is required. However each half may be accessed
 // concurrently so the implementation of conn should protect against
 // concurrent reads or concurrent writes.
-func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
+func NewRPCClient(network, address, servicePath string, dialTimeout time.Duration) (*RPCClient, error) {
 	log.Infof("create rpc client for netword %s address %s service %s", network, address, servicePath)
 	var conn net.Conn
 	var err error
 	if network == "tcp" {
-		conn, err = Dial(network, address)
+		conn, err = Dial(network, address, dialTimeout)
 		if err != nil {
 			return nil, err
 		}
 	} else if network == "http" {
-		conn, err = DialHTTP(network, address)
+		conn, err = DialHTTP(network, address, dialTimeout)
 		if err != nil {
 			return nil, err
 		}
@@ -557,6 +569,7 @@ func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
 		pending:           make(map[uint64]*Call),
 		heartBeatInterval: defHeatBeatInterval,
 		doneChan:          make(chan struct{}),
+		DialTimeout:       dialTimeout,
 	}
 
 	go client.input()

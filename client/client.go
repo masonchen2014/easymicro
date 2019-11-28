@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/discovery"
@@ -18,7 +19,7 @@ func NewClient(network, address, servicePath string, opts ...ClientOption) (*Cli
 		servicePath: servicePath,
 		selectMode:  SelectByUser,
 	}
-	rpcClient, err := NewRPCClient(network, address, servicePath)
+	rpcClient, err := NewRPCClient(network, address, servicePath, client.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +77,7 @@ type Client struct {
 	HeartBeatTryNums  int
 	HeartBeatTimeout  int
 	HeartBeatInterval int64
+	DialTimeout       time.Duration
 
 	breaker *gobreaker.CircuitBreaker
 	bucket  *ratelimit.Bucket
@@ -131,7 +133,7 @@ func (c *Client) selectRPCClient() (*RPCClient, error) {
 	rpcClient = c.cachedClient[selectedNode.Addr]
 	c.mu.RUnlock()
 	if rpcClient == nil || rpcClient.status == ConnClose || rpcClient.status == ConnReconnectFail {
-		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath)
+		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath, c.DialTimeout)
 		if err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/client"
@@ -16,16 +17,16 @@ import (
 )
 
 func NewClient(network, address, servicePath string) (*Client, error) {
-	client := &Client{
+	c := &Client{
 		servicePath: servicePath,
 		selectMode:  client.SelectByUser,
 	}
-	rpcClient, err := NewRPCClient(network, address, servicePath)
+	rpcClient, err := NewRPCClient(network, address, servicePath, c.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
-	client.defaultRPCClient = rpcClient
-	return client, nil
+	c.defaultRPCClient = rpcClient
+	return c, nil
 }
 
 func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster) (*Client, error) {
@@ -71,6 +72,7 @@ type Client struct {
 	HeartBeatTryNums  int
 	HeartBeatTimeout  int
 	HeartBeatInterval int64
+	DialTimeout       time.Duration
 
 	breaker *gobreaker.CircuitBreaker
 	bucket  *ratelimit.Bucket
@@ -133,8 +135,8 @@ func (c *Client) selectRPCClient() (*RPCClient, error) {
 	c.mu.RLock()
 	rpcClient = c.cachedClient[selectedNode.Addr]
 	c.mu.RUnlock()
-	if rpcClient == nil || || rpcClient.status == client.ConnClose || rpcClient.status == client.ConnReconnectFail  {
-		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath)
+	if rpcClient == nil || rpcClient.status == client.ConnClose || rpcClient.status == client.ConnReconnectFail {
+		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath, c.DialTimeout)
 		if err != nil {
 			return nil, err
 		}

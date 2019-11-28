@@ -1,13 +1,21 @@
 package client
 
 import (
-	"github.com/masonchen2014/easymicro/log"
+	"time"
+
 	"github.com/juju/ratelimit"
+	"github.com/masonchen2014/easymicro/log"
 	"github.com/sony/gobreaker"
 )
 
 //client set function
 type ClientOption func(*Client)
+
+func SetDialTimeout(t time.Duration) ClientOption {
+	return func(c *Client) {
+		c.DialTimeout = t
+	}
+}
 
 func SetSelector(mode SelectMode) ClientOption {
 	return func(c *Client) {

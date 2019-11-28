@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/masonchen2014/easymicro/client"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
@@ -81,10 +82,11 @@ type RPCClient struct {
 	seq      uint64
 	pending  map[uint64]*Call
 	lastSend int64
-	status   ConnStatus
+	status   client.ConnStatus
 	suicide  bool
 	//shutdown bool // server has told us to stop
-	doneChan chan struct{}
+	doneChan    chan struct{}
+	DialTimeout time.Duration
 }
 
 func createHeartBeatReq() *protocol.Message {
@@ -122,16 +124,16 @@ func (client *RPCClient) sendHeartBeat() error {
 	return err
 }
 
-func (client *RPCClient) reconnect() error {
-	client.mutex.Lock()
-	if client.suicide {
-		client.mutex.Unlock()
+func (c *RPCClient) reconnect() error {
+	c.mutex.Lock()
+	if c.suicide {
+		c.mutex.Unlock()
 		return ErrShutdown
 	}
-	client.status = ConnReconnect
-	client.mutex.Unlock()
+	c.status = client.ConnReconnect
+	c.mutex.Unlock()
 
-	reconnectTryNums := int(client.reconnectTryNums)
+	reconnectTryNums := int(c.reconnectTryNums)
 	if reconnectTryNums <= 0 {
 		reconnectTryNums = 6
 	}
@@ -141,10 +143,10 @@ func (client *RPCClient) reconnect() error {
 	tempDelay := 1
 	for i := 1; i <= reconnectTryNums; i++ {
 		log.Infof("client reconnect for %d time at time %d", i, time.Now().Unix())
-		if client.network == "tcp" {
-			conn, err = Dial(client.network, client.address)
-		} else if client.network == "http" {
-			conn, err = DialHTTP(client.network, client.address)
+		if c.network == "tcp" {
+			conn, err = Dial(c.network, c.address, c.DialTimeout)
+		} else if c.network == "http" {
+			conn, err = DialHTTP(c.network, c.address, c.DialTimeout)
 		}
 		if err != nil {
 			log.Errorf("client reconnect error %+v", err)
@@ -159,46 +161,46 @@ func (client *RPCClient) reconnect() error {
 	}
 
 	if err != nil {
-		client.mutex.Lock()
-		client.status = ConnReconnectFail
-		client.suicide = false
-		client.mutex.Unlock()
+		c.mutex.Lock()
+		c.status = client.ConnReconnectFail
+		c.suicide = false
+		c.mutex.Unlock()
 		return err
 	}
 
-	client.mutex.Lock()
-	client.conn = conn
-	client.status = ConnAvailable
-	client.suicide = false
-	client.mutex.Unlock()
+	c.mutex.Lock()
+	c.conn = conn
+	c.status = client.ConnAvailable
+	c.suicide = false
+	c.mutex.Unlock()
 	log.Infof("client reconnect success")
 	return nil
 }
 
-func (client *RPCClient) send(call *Call) {
+func (c *RPCClient) send(call *Call) {
 
 	// Register this call.
-	client.mutex.Lock()
-	if client.status != ConnAvailable {
-		client.mutex.Unlock()
+	c.mutex.Lock()
+	if c.status != client.ConnAvailable {
+		c.mutex.Unlock()
 		call.Error = ErrShutdown
 		call.done()
 		return
 	}
 
-	seq := atomic.AddUint64(&client.seq, 1)
-	client.pending[seq] = call
-	client.lastSend = time.Now().Unix()
-	rawConn := client.conn
-	client.mutex.Unlock()
+	seq := atomic.AddUint64(&c.seq, 1)
+	c.pending[seq] = call
+	c.lastSend = time.Now().Unix()
+	rawConn := c.conn
+	c.mutex.Unlock()
 
 	call.Req.SetSeq(seq)
 	_, err := rawConn.Write(call.Req.Encode())
 	if err != nil {
-		client.mutex.Lock()
-		call = client.pending[seq]
-		delete(client.pending, seq)
-		client.mutex.Unlock()
+		c.mutex.Lock()
+		call = c.pending[seq]
+		delete(c.pending, seq)
+		c.mutex.Unlock()
 		if call != nil {
 			call.Error = err
 			call.done()
@@ -212,39 +214,39 @@ func (client *RPCClient) readResponse(resp *protocol.Message) (*protocol.Message
 	return resp, err
 }
 
-func (client *RPCClient) keepalive() {
-	timer := time.NewTimer(time.Duration(client.heartBeatInterval) * time.Second)
+func (c *RPCClient) keepalive() {
+	timer := time.NewTimer(time.Duration(c.heartBeatInterval) * time.Second)
 	for {
 		select {
 		case <-timer.C:
 			//examine lastSend
-			nextKaInterval := client.heartBeatInterval
-			client.mutex.Lock()
-			if client.status != ConnAvailable {
-				client.mutex.Unlock()
+			nextKaInterval := c.heartBeatInterval
+			c.mutex.Lock()
+			if c.status != client.ConnAvailable {
+				c.mutex.Unlock()
 				timer.Reset(time.Duration(nextKaInterval) * time.Second)
 				continue
 			}
-			lastSend := client.lastSend
-			client.mutex.Unlock()
+			lastSend := c.lastSend
+			c.mutex.Unlock()
 
 			now := time.Now().Unix()
-			if now-lastSend < client.heartBeatInterval {
-				nextKaInterval = lastSend + client.heartBeatInterval - now
+			if now-lastSend < c.heartBeatInterval {
+				nextKaInterval = lastSend + c.heartBeatInterval - now
 			} else {
 				//here send heart beat
-				if err := client.sendHeartBeat(); err != nil {
-					client.mutex.Lock()
-					if client.status == ConnAvailable {
-						client.suicide = true
-						client.status = ConnClose
-						client.conn.Close()
+				if err := c.sendHeartBeat(); err != nil {
+					c.mutex.Lock()
+					if c.status == client.ConnAvailable {
+						c.suicide = true
+						c.status = client.ConnClose
+						c.conn.Close()
 					}
-					client.mutex.Unlock()
+					c.mutex.Unlock()
 				}
 			}
 			timer.Reset(time.Duration(nextKaInterval) * time.Second)
-		case <-client.getDoneChan():
+		case <-c.getDoneChan():
 			log.Infof("client keepalive goroutine exit")
 			return
 		}
@@ -255,20 +257,20 @@ func (client *RPCClient) Close() {
 	client.close(ErrShutdown)
 }
 
-func (client *RPCClient) close(err error) {
+func (c *RPCClient) close(err error) {
 	// Terminate pending calls.
-	client.mutex.Lock()
-	if client.status != ConnClose {
-		client.status = ConnClose
-		for _, call := range client.pending {
+	c.mutex.Lock()
+	if c.status != client.ConnClose {
+		c.status = client.ConnClose
+		for _, call := range c.pending {
 			call.Error = err
 			call.done()
 		}
-		client.conn.Close()
-		close(client.doneChan)
+		c.conn.Close()
+		close(c.doneChan)
 	}
 
-	client.mutex.Unlock()
+	c.mutex.Unlock()
 }
 
 func (client *RPCClient) input() {
@@ -336,17 +338,19 @@ func checkReplyError(reply *protocol.Message) error {
 
 // DialHTTP connects to an HTTP RPC server at the specified network address
 // listening on the default HTTP RPC path.
-func DialHTTP(network, address string) (net.Conn, error) {
-	return DialHTTPPath(network, address, DefaultRPCPath)
+func DialHTTP(network, address string, timeout time.Duration) (net.Conn, error) {
+	return DialHTTPPath(network, address, DefaultRPCPath, timeout)
 }
 
 // DialHTTPPath connects to an HTTP RPC server
 // at the specified network address and path.
-func DialHTTPPath(network, address, path string) (net.Conn, error) {
+func DialHTTPPath(network, address, path string, timeout time.Duration) (net.Conn, error) {
+	var conn net.Conn
 	var err error
-	conn, err := net.DialTimeout(network, address, 3*time.Second)
-	if err != nil {
-		return nil, err
+	if timeout > 0 {
+		conn, err = net.DialTimeout(network, address, timeout)
+	} else {
+		conn, err = net.Dial(network, address)
 	}
 	io.WriteString(conn, "CONNECT "+path+" HTTP/1.0\n\n")
 
@@ -369,8 +373,14 @@ func DialHTTPPath(network, address, path string) (net.Conn, error) {
 }
 
 // Dial connects to an RPC server at the specified network address.
-func Dial(network, address string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, address, 3*time.Second)
+func Dial(network, address string, timeout time.Duration) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+	if timeout > 0 {
+		conn, err = net.DialTimeout(network, address, timeout)
+	} else {
+		conn, err = net.Dial(network, address)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -433,17 +443,17 @@ func (client *RPCClient) Call(ctx context.Context, serviceMethod string, args *p
 // so no interlocking is required. However each half may be accessed
 // concurrently so the implementation of conn should protect against
 // concurrent reads or concurrent writes.
-func NewRPCClient(network, address, servicePath string) (*RPCClient, error) {
+func NewRPCClient(network, address, servicePath string, dialTimeout time.Duration) (*RPCClient, error) {
 	log.Infof("create rpc client for netword %s address %s service %s", network, address, servicePath)
 	var conn net.Conn
 	var err error
 	if network == "tcp" {
-		conn, err = Dial(network, address)
+		conn, err = Dial(network, address, dialTimeout)
 		if err != nil {
 			return nil, err
 		}
 	} else if network == "http" {
-		conn, err = DialHTTP(network, address)
+		conn, err = DialHTTP(network, address, dialTimeout)
 		if err != nil {
 			return nil, err
 		}
