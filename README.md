@@ -106,9 +106,9 @@
   
 - 服务发现
 
-  - 目前仅支持etcd
+  -  目前仅支持etcd
 
-  - 客户端
+  -  客户端
 
     ```go
     	cli, err := client.NewDiscoveryClient("Arith", dis.NewEtcdDiscoveryMaster([]string{
