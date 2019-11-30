@@ -1,4 +1,7 @@
+
+
 # easymicro
+
 - 一个简单易用、好理解的微服务治理框架，实现上参照了net/rpc、rpcx、grpc等诸多优秀的rpc框架，底层数据传输协议使用rpcx协议格式，框架封装则主要在net/rpc库的基础上，增加超时访问、心跳保活、断开重连、元数据传递、服务发现、熔断、限流以及指标统计和链路追踪等特性；服务端支持网关模式，可以处理本服务的http访问请求；同时还提供了一个通用的网关实现，可以用于快速搭建自己的微服务集群。
 
 - 依赖管理
@@ -102,31 +105,31 @@
   		panic(err)
   	}
   defer cli.Close()
-```
+  ```
   
 - 服务发现
 
-  -  目前仅支持etcd
+  - 目前仅支持etcd
 
-  -  客户端
+  - 客户端
 
     ```go
     	cli, err := client.NewDiscoveryClient("Arith", dis.NewEtcdDiscoveryMaster([]string{
-    		"http://127.0.0.1:22379",
-    	}, "Arith"))
+        		"http://127.0.0.1:22379",
+        	}, "Arith"))
     ```
 
-  - 服务端
+    - 服务端
 
-    ```go
-  	s := server.NewServer(server.SetEtcdDiscovery([]string{
-    		"http://127.0.0.1:22379",
-    	}, "127.0.0.1:8972"))
-    
-    	s.RegisterName("Arith", new(Arith))
-    	s.Serve("tcp", ":8972")
-    ```
+  ```go
+    	s := server.NewServer(server.SetEtcdDiscovery([]string{
+  		"http://127.0.0.1:22379",
+  	}, "127.0.0.1:8972"))
   
+  	s.RegisterName("Arith", new(Arith))
+  	s.Serve("tcp", ":8972")
+  ```
+
 - 网关代理模式
 
   - 服务端
