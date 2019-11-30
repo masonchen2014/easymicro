@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	dis "github.com/masonchen2014/easymicro/discovery"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/sony/gobreaker"
 
@@ -28,9 +27,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	cli, err := client.NewDiscoveryClient("Arith", dis.NewEtcdDiscoveryMaster([]string{
-		"http://127.0.0.1:22379",
-	}, "services/Arith/"), client.SetCircuitBreaker(gobreaker.Settings{
+	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetCircuitBreaker(gobreaker.Settings{
 		Name:          "test_circuit",
 		MaxRequests:   5,
 		Timeout:       5 * time.Second,

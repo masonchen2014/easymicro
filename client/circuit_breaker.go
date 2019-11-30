@@ -24,6 +24,6 @@ func NewOnStateChange() func(name string, from gobreaker.State, to gobreaker.Sta
 		return ""
 	}
 	return func(name string, from gobreaker.State, to gobreaker.State) {
-		log.Errorf("name %s change from %s to %s", name, f(from), f(to))
+		log.Infof("name %s change from %s to %s", name, f(from), f(to))
 	}
 }
