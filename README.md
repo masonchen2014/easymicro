@@ -104,8 +104,6 @@
   defer cli.Close()
 ```
   
-
-  
 - 服务发现
 
   - 目前仅支持etcd
@@ -118,19 +116,17 @@
     	}, "Arith"))
     ```
 
-    
-
   - 服务端
 
     ```go
-    	s := server.NewServer(server.SetEtcdDiscovery([]string{
+  	s := server.NewServer(server.SetEtcdDiscovery([]string{
     		"http://127.0.0.1:22379",
     	}, "127.0.0.1:8972"))
     
     	s.RegisterName("Arith", new(Arith))
     	s.Serve("tcp", ":8972")
     ```
-
+  
 - 网关代理模式
 
   - 服务端
