@@ -93,12 +93,10 @@
   - 服务端
 
     ```go
-    	s := server.NewServer(server.SetGateWayMode(":8888"))
+    	s := server.NewServer(server.SetGateWayMode())
     	s.RegisterName("Arith", new(Arith))
     	s.Serve("tcp", ":8972")
     ```
-
-  - TODO 后续会加上网关代理的服务发现
 
 - 独立网关
 
