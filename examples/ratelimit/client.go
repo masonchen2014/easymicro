@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	dis "github.com/masonchen2014/easymicro/discovery"
-	"github.com/masonchen2014/easymicro/log"
 	"github.com/juju/ratelimit"
+	"github.com/masonchen2014/easymicro/log"
 
 	"github.com/masonchen2014/easymicro/client"
 )
@@ -28,9 +27,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	cli, err := client.NewDiscoveryClient("Arith", dis.NewEtcdDiscoveryMaster([]string{
-		"http://127.0.0.1:22379",
-	}, "services/Arith/"), client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
+	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
 
 	if err != nil {
 		panic(err)
