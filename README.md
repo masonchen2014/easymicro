@@ -33,6 +33,20 @@
     - 根据配置的时间间隔，发送心跳包到对端，当本地有数据发送时，则推迟心跳包到发送，如果心跳包发送失败（会尝试重发几次），则根据当前连接的状态做相应的处理。
     - 当rpcclient关闭时，会退出keepalive goroutine。
 
+- 超时
+
+  ```go
+  	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+  	log.Infof("client call at time %d", time.Now().Unix())
+  	err = client.Call(ctx, "Mul", args, reply)
+  	if err != nil {
+  		//log.Fatalf("failed to call: %v", err)
+  		log.Error(err)
+  	}
+  ```
+
+  
+
 - 元数据传递
 
   - 客户端发送和获取
@@ -63,6 +77,35 @@
     	})
     ```
 
+- 熔断
+
+  ```go
+	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetCircuitBreaker(gobreaker.Settings{
+  		Name:          "test_circuit",
+		MaxRequests:   5,
+  		Timeout:       5 * time.Second,
+  		OnStateChange: client.NewOnStateChange(),
+  	}))
+  
+  ```
+
+  
+
+- 限流
+
+  - 使用令牌桶算法
+
+  ```go
+	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
+  
+  	if err != nil {
+  		panic(err)
+  	}
+  defer cli.Close()
+```
+  
+
+  
 - 服务发现
 
   - 目前仅支持etcd

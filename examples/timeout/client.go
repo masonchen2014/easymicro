@@ -44,16 +44,13 @@ func main() {
 	reply := &Reply{}
 
 	// #5
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	log.Infof("client call at time %d", time.Now().Unix())
 	err = client.Call(ctx, "Mul", args, reply)
 	if err != nil {
 		//log.Fatalf("failed to call: %v", err)
 		log.Error(err)
 	}
-	defer func() {
-		cancel()
-	}()
 
 	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
 
