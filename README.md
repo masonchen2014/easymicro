@@ -121,14 +121,16 @@
 
     - 服务端
 
-  ```go
-    	s := server.NewServer(server.SetEtcdDiscovery([]string{
-  		"http://127.0.0.1:22379",
-  	}, "127.0.0.1:8972"))
-  
-  	s.RegisterName("Arith", new(Arith))
-  	s.Serve("tcp", ":8972")
-  ```
+      ```go
+       	s := server.NewServer(server.SetEtcdDiscovery([]string{
+      		"http://127.0.0.1:22379",
+      	}, "127.0.0.1:8972"))
+      
+      	s.RegisterName("Arith", new(Arith))
+      	s.Serve("tcp", ":8972")
+      ```
+
+      
 
 - 网关代理模式
 
@@ -146,7 +148,6 @@
   curl  -H "Easymro-Version:1.1" -H "Easymicro-SerializeTypymicro-Messageid:1"  -X POST --data '{"a":73,"b":1500}'  http://127.0.0.1:8972/Arith/mul
     ```
     
-    
 
 - 独立网关
 
@@ -162,8 +163,6 @@
     ```shell
   curl  -H "Easymro-Version:1.1" -H "Easymicro-SerializeType:1" -H "Easymicro-Messageid:1"  -X POST --data '{"a":73,"b":1500}'  http://127.0.0.1:8887/Arith/mul
     ```
-
-    
 
 - 性能
 
