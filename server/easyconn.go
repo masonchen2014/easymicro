@@ -93,12 +93,27 @@ func (ec *easyConn) serveConn() {
 			protocol.FreeMsg(req)
 			continue
 		}
-		ctx := context.WithValue(context.Background(), ConnDataKey{}, ec)
-		ec.server.jobChan <- &workerJob{
-			ctx:  ctx,
-			conn: ec,
-			req:  req,
-		}
+
+		go ec.handleTrueRequest(context.Background(), req)
 	}
 
+}
+
+func (ec *easyConn) handleTrueRequest(ctx context.Context, req *protocol.Message) {
+	ctx, err := extractClientMdContexFromMd(ctx, req.Metadata)
+	if err != nil {
+		log.Errorf("ExtractClientMdContexFromMd error %v", err)
+		protocol.FreeMsg(req)
+		return
+	}
+
+	res, err := ec.server.handleRequest(ctx, req)
+	if err != nil {
+		log.Errorf("handleRequest error %v", err)
+		protocol.FreeMsg(req)
+		return
+	}
+	ec.writeResponse(res)
+	protocol.FreeMsg(req)
+	protocol.FreeMsg(res)
 }

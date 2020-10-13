@@ -21,12 +21,6 @@ func SetBasicOption(opt Option) ServerOption {
 		if opt.MaxConnIdleTime > 0 {
 			s.maxConnIdleTime = opt.MaxConnIdleTime
 		}
-		if opt.JobChanSize > 0 {
-			s.jobChanSize = opt.JobChanSize
-		}
-		if opt.WorkerNum > 0 {
-			s.workerNum = opt.WorkerNum
-		}
 		return nil
 	}
 }

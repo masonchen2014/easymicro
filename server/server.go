@@ -38,9 +38,6 @@ type Server struct {
 	serviceMap      map[string]*service
 	maxConnIdleTime int64
 	mu              sync.RWMutex
-	jobChan         chan *workerJob
-	jobChanSize     int64
-	workerNum       int64
 	doneChan        chan struct{}
 	discovery       discovery.Discovery
 	name            string
@@ -64,8 +61,6 @@ type workerJob struct {
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		maxConnIdleTime: defaultOption.MaxConnIdleTime,
-		jobChanSize:     defaultOption.JobChanSize,
-		workerNum:       defaultOption.WorkerNum,
 	}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
@@ -73,7 +68,6 @@ func NewServer(opts ...ServerOption) *Server {
 		}
 	}
 
-	s.jobChan = make(chan *workerJob, s.jobChanSize)
 	return s
 }
 
@@ -241,7 +235,6 @@ func (server *Server) Serve(network, address string) {
 			})
 		}()
 	}
-	go server.startWorkers()
 	go server.handleSignal()
 
 	if server.useGateWay {
@@ -411,39 +404,6 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (server *Server) HandleHTTP(rpcPath, debugPath string) {
 	http.Handle(rpcPath, server)
 	//	http.Handle(debugPath, debugHTTP{server})
-}
-
-//start job workers that handle all the requests from client
-func (server *Server) startWorkers() {
-	server.wg.Add(int(server.workerNum))
-	for i := 1; i <= int(server.workerNum); i++ {
-		go func(goNum int) {
-			defer server.wg.Done()
-			for {
-				select {
-				case job := <-server.jobChan:
-					//log.Debugf("goroutine %d get job %+v", goNum, job)
-					ctx, err := extractClientMdContexFromMd(job.ctx, job.req.Metadata)
-					if err != nil {
-						log.Errorf("ExtractClientMdContexFromMd error %v", err)
-						protocol.FreeMsg(job.req)
-						continue
-					}
-
-					res, err := server.handleRequest(ctx, job.req)
-					if err != nil {
-						log.Errorf("handleRequest error %v", err)
-					}
-					job.conn.writeResponse(res)
-					protocol.FreeMsg(job.req)
-					protocol.FreeMsg(res)
-				case <-server.getDoneChan():
-					log.Infof("goroutine %d exit", goNum)
-					return
-				}
-			}
-		}(i)
-	}
 }
 
 func (server *Server) handleSignal() {
