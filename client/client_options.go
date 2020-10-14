@@ -3,7 +3,6 @@ package client
 import (
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/sony/gobreaker"
 )
@@ -39,14 +38,16 @@ func SetRoundRobinSelector() ClientOption {
 	return SetSelector(RoundRobin)
 }
 
-func SetCircuitBreaker(setting gobreaker.Settings) ClientOption {
+func SetCircuitBreaker(s *gobreaker.Settings) ClientOption {
 	return func(c *Client) {
-		c.breaker = gobreaker.NewCircuitBreaker(setting)
+		c.breakerConfig = s
+		//	c.breaker = gobreaker.NewCircuitBreaker(setting)
 	}
 }
 
-func SetRateLimiter(tb *ratelimit.Bucket) ClientOption {
+func SetRateLimiter(conf *LimiterConfig) ClientOption {
 	return func(c *Client) {
-		c.bucket = tb
+		c.limiterConfig = conf
+		//	c.bucket = tb
 	}
 }

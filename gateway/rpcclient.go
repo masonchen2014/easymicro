@@ -17,10 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/client"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
+	"github.com/sony/gobreaker"
 )
 
 const (
@@ -87,6 +89,8 @@ type RPCClient struct {
 	//shutdown bool // server has told us to stop
 	doneChan    chan struct{}
 	DialTimeout time.Duration
+	breaker     *gobreaker.CircuitBreaker
+	bucket      *ratelimit.Bucket
 }
 
 func createHeartBeatReq() *protocol.Message {
@@ -431,6 +435,18 @@ func (client *RPCClient) Call(ctx context.Context, serviceMethod string, args *p
 		return call.Reply, call.Error
 	case <-ctx.Done():
 		return nil, ErrTimeOut
+	}
+}
+
+func (c *RPCClient) SetCircuitBreaker(s *gobreaker.Settings) {
+	if s != nil {
+		c.breaker = gobreaker.NewCircuitBreaker(*s)
+	}
+}
+
+func (c *RPCClient) SetRateLimiter(conf *LimiterConfig) {
+	if conf != nil {
+		c.bucket = ratelimit.NewBucketWithQuantum(conf.fillInterval, conf.capacity, conf.quantum)
 	}
 }
 

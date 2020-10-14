@@ -17,9 +17,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/log"
 	"github.com/masonchen2014/easymicro/protocol"
 	"github.com/masonchen2014/easymicro/share"
+	"github.com/sony/gobreaker"
 )
 
 const (
@@ -98,6 +100,8 @@ type RPCClient struct {
 	//closing bool
 	//shutdown bool // server has told us to stop
 	doneChan chan struct{}
+	breaker  *gobreaker.CircuitBreaker
+	bucket   *ratelimit.Bucket
 }
 
 //create request message from call param
@@ -525,12 +529,39 @@ func (client *RPCClient) Go(ctx context.Context, serviceMethod string, args inte
 }
 
 // Call invokes the named function, waits for it to complete, and returns its error status.
-func (client *RPCClient) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
-	select {
-	case call := <-client.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
-		return call.Error
-	case <-ctx.Done():
-		return ErrTimeOut
+func (c *RPCClient) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
+	if c.bucket != nil {
+		c.bucket.Wait(1)
+	}
+	if c.breaker != nil {
+		_, err := c.breaker.Execute(func() (interface{}, error) {
+			select {
+			case call := <-c.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
+				return nil, call.Error
+			case <-ctx.Done():
+				return nil, ErrTimeOut
+			}
+		})
+		return err
+	} else {
+		select {
+		case call := <-c.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
+			return call.Error
+		case <-ctx.Done():
+			return ErrTimeOut
+		}
+	}
+}
+
+func (c *RPCClient) SetCircuitBreaker(s *gobreaker.Settings) {
+	if s != nil {
+		c.breaker = gobreaker.NewCircuitBreaker(*s)
+	}
+}
+
+func (c *RPCClient) SetRateLimiter(conf *LimiterConfig) {
+	if conf != nil {
+		c.bucket = ratelimit.NewBucketWithQuantum(conf.fillInterval, conf.capacity, conf.quantum)
 	}
 }
 

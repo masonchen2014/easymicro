@@ -2,13 +2,11 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/client"
 	"github.com/masonchen2014/easymicro/discovery"
 	"github.com/masonchen2014/easymicro/log"
@@ -25,6 +23,8 @@ func NewClient(network, address, servicePath string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	rpcClient.SetCircuitBreaker(c.breakerConfig)
+	rpcClient.SetRateLimiter(c.limiterConfig)
 	c.defaultRPCClient = rpcClient
 	return c, nil
 }
@@ -42,6 +42,12 @@ func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster) (*Cli
 		log.Panicf("invalid discovery master")
 	}
 	return client, nil
+}
+
+type LimiterConfig struct {
+	fillInterval time.Duration
+	capacity     int64
+	quantum      int64
 }
 
 type Client struct {
@@ -74,40 +80,19 @@ type Client struct {
 	HeartBeatInterval int64
 	DialTimeout       time.Duration
 
-	breaker *gobreaker.CircuitBreaker
-	bucket  *ratelimit.Bucket
+	//	breaker *gobreaker.CircuitBreaker
+	//	bucket  *ratelimit.Bucket
+	breakerConfig *gobreaker.Settings
+	limiterConfig *LimiterConfig
 }
 
 func (c *Client) Call(ctx context.Context, serviceMethod string, req *protocol.Message) (*protocol.Message, error) {
-	if c.bucket != nil {
-		c.bucket.Wait(1)
+	rpcClient, err := c.selectRPCClient()
+	if err != nil {
+		log.Errorf("select rpc client failed for err %v", err)
+		return nil, err
 	}
-	if c.breaker != nil {
-		reply, err := c.breaker.Execute(func() (interface{}, error) {
-			rpcClient, err := c.selectRPCClient()
-			if err != nil {
-				log.Errorf("select rpc client failed for err %v", err)
-				return nil, err
-			}
-			return rpcClient.Call(ctx, strings.ToLower(serviceMethod), req)
-		})
-
-		if err != nil {
-			return nil, err
-		}
-		replyMsg, b := reply.(*protocol.Message)
-		if !b {
-			return nil, errors.New("invalid reply")
-		}
-		return replyMsg, nil
-	} else {
-		rpcClient, err := c.selectRPCClient()
-		if err != nil {
-			log.Errorf("select rpc client failed for err %v", err)
-			return nil, err
-		}
-		return rpcClient.Call(ctx, strings.ToLower(serviceMethod), req)
-	}
+	return rpcClient.Call(ctx, strings.ToLower(serviceMethod), req)
 }
 
 func (c *Client) Go(ctx context.Context, serviceMethod string, req *protocol.Message, done chan *Call) *Call {
@@ -140,6 +125,8 @@ func (c *Client) selectRPCClient() (*RPCClient, error) {
 		if err != nil {
 			return nil, err
 		}
+		rCli.SetCircuitBreaker(c.breakerConfig)
+		rCli.SetRateLimiter(c.limiterConfig)
 		rpcClient = rCli
 		c.mu.Lock()
 		c.cachedClient[selectedNode.Addr] = rpcClient

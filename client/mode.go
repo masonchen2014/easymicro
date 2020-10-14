@@ -32,5 +32,5 @@ const (
 	Closest
 
 	// SelectByUser is selecting by implementation of users
-	SelectByUser = 1000
+	SelectByUser
 )
