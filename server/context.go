@@ -74,7 +74,7 @@ func extractClientMdContexFromMd(ctx context.Context, md map[string]string) (con
 
 	}
 	if len(commonMd) > 0 {
-		ctx = context.WithValue(ctx, share.ReqMetaDataKey{}, md)
+		ctx = context.WithValue(ctx, share.ReqMetaDataKey{}, commonMd)
 	}
 
 	if hasSpanCtx {

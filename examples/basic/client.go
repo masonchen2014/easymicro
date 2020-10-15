@@ -50,5 +50,5 @@ func main() {
 	client.Call(context.Background(), "Mul", args, reply)
 	log.Infof("%d * %d = %d", args.A, args.B, reply.C)
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(200 * time.Second)
 }
