@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/masonchen2014/easymicro/log"
 
 	"github.com/masonchen2014/easymicro/client"
@@ -31,7 +30,11 @@ func main() {
 		Network:     "tcp",
 		Address:     ":8972",
 		ServicePath: "Arith",
-	}, client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
+	}, client.SetRateLimiter(&client.LimiterConfig{
+		FillInterval: time.Second,
+		Capacity:     5,
+		Quantum:      1,
+	}))
 
 	if err != nil {
 		panic(err)

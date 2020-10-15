@@ -561,7 +561,7 @@ func (c *RPCClient) SetCircuitBreaker(s *gobreaker.Settings) {
 
 func (c *RPCClient) SetRateLimiter(conf *LimiterConfig) {
 	if conf != nil {
-		c.bucket = ratelimit.NewBucketWithQuantum(conf.fillInterval, conf.capacity, conf.quantum)
+		c.bucket = ratelimit.NewBucketWithQuantum(conf.FillInterval, conf.Capacity, conf.Quantum)
 	}
 }
 

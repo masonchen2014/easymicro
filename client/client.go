@@ -123,9 +123,9 @@ func NewDiscoveryClient(conf *DiscoverClientConfig, opts ...ClientOption) (*Clie
 }
 
 type LimiterConfig struct {
-	fillInterval time.Duration
-	capacity     int64
-	quantum      int64
+	FillInterval time.Duration
+	Capacity     int64
+	Quantum      int64
 }
 
 func (c *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
