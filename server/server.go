@@ -39,7 +39,7 @@ type Server struct {
 	maxConnIdleTime int64
 	mu              sync.RWMutex
 	doneChan        chan struct{}
-	discovery       discovery.Discovery
+	discovery       discovery.Publisher
 	name            string
 	advertiseUrl    string
 	wg              sync.WaitGroup

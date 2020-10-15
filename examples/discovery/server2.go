@@ -23,7 +23,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	s := server.NewServer(server.SetEtcdDiscovery([]string{
+	s := server.NewServer(server.SetEtcdPublisher([]string{
 		"http://127.0.0.1:22379",
 		//"http://172.16.164.179:2379",
 	}, "127.0.0.1:8973"))

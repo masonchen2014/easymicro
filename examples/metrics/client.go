@@ -27,7 +27,11 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 
 func main() {
 	// #1
-	client, err := client.NewClient("tcp", ":8973", "Arith")
+	client, err := client.NewClient(&client.ClientConfig{
+		Network:     "tcp",
+		Address:     ":8972",
+		ServicePath: "Arith",
+	})
 	if err != nil {
 		log.Panic(err)
 		return

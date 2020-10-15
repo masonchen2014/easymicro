@@ -13,7 +13,11 @@ import (
 
 func main() {
 	// #1
-	c, err := client.NewClient("tcp", ":8972", "Arith")
+	c, err := client.NewClient(&client.ClientConfig{
+		Network:     "tcp",
+		Address:     ":8972",
+		ServicePath: "Arith",
+	})
 	if err != nil {
 		log.Panic(err)
 		return

@@ -67,6 +67,7 @@ require (
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.3 // indirect
+	go.etcd.io/etcd v3.3.25+incompatible
 	go.uber.org/zap v1.12.0 // indirect
 	golang.org/x/net v0.0.0-20191002035440-2ec189313ef0
 	google.golang.org/grpc v1.24.0

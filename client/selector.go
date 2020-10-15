@@ -1,15 +1,13 @@
 package client
 
 import (
-	"math/rand"
 	"sync"
-	"time"
 
-	"github.com/masonchen2014/easymicro/discovery"
+	"github.com/masonchen2014/easymicro/log"
 )
 
 type Selector interface {
-	Pick([]*discovery.ServiceInfo) *discovery.ServiceInfo
+	Pick([]*RPCClient) *RPCClient
 }
 
 type RoundRobinSelector struct {
@@ -21,23 +19,20 @@ func NewRoundRobinSelector() *RoundRobinSelector {
 	return &RoundRobinSelector{}
 }
 
-func (s *RoundRobinSelector) Pick(nodes []*discovery.ServiceInfo) *discovery.ServiceInfo {
+func (s *RoundRobinSelector) Pick(clients []*RPCClient) *RPCClient {
+	var rpcCli *RPCClient
 	s.mu.Lock()
-	s.LastIndex = (s.LastIndex + 1) % int64(len(nodes))
-	node := nodes[s.LastIndex]
+	s.LastIndex = (s.LastIndex + 1) % int64(len(clients))
+	for i := 0; i < len(clients); i++ {
+		rpcCli = clients[s.LastIndex]
+		log.Infof("Pick rpcCli %+v", *rpcCli)
+		if rpcCli.status != ConnAvailable {
+			s.LastIndex = (s.LastIndex + 1) % int64(len(clients))
+		}
+	}
 	s.mu.Unlock()
-	return node
-}
-
-type RandomSelector struct {
-}
-
-func NewRandomSelector() *RandomSelector {
-	return &RandomSelector{}
-}
-
-func (s *RandomSelector) Pick(nodes []*discovery.ServiceInfo) *discovery.ServiceInfo {
-	rand.Seed(int64(time.Now().UnixNano()))
-	return nodes[rand.Intn(len(nodes))]
-
+	if rpcCli.status != ConnAvailable {
+		return nil
+	}
+	return rpcCli
 }

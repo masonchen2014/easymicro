@@ -574,33 +574,33 @@ func (c *RPCClient) SetRateLimiter(conf *LimiterConfig) {
 // so no interlocking is required. However each half may be accessed
 // concurrently so the implementation of conn should protect against
 // concurrent reads or concurrent writes.
-func NewRPCClient(network, address, servicePath string, dialTimeout time.Duration) (*RPCClient, error) {
-	log.Infof("create rpc client for netword %s address %s service %s", network, address, servicePath)
+func NewRPCClient(conf *RPCClientConfig) (*RPCClient, error) {
+	log.Infof("create rpc client for netword %s address %s service %s", conf.network, conf.address, conf.servicePath)
 	var conn net.Conn
 	var err error
-	if network == "tcp" {
-		conn, err = Dial(network, address, dialTimeout)
+	if conf.network == "tcp" {
+		conn, err = Dial(conf.network, conf.address, conf.dialTimeout)
 		if err != nil {
 			return nil, err
 		}
-	} else if network == "http" {
-		conn, err = DialHTTP(network, address, dialTimeout)
+	} else if conf.network == "http" {
+		conn, err = DialHTTP(conf.network, conf.address, conf.dialTimeout)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		return nil, fmt.Errorf("unsupport network %s", network)
+		return nil, fmt.Errorf("unsupport network %s", conf.network)
 	}
 
 	client := &RPCClient{
-		network:           network,
-		address:           address,
-		servicePath:       strings.ToLower(servicePath),
+		network:           conf.network,
+		address:           conf.address,
+		servicePath:       strings.ToLower(conf.servicePath),
 		conn:              conn,
 		pending:           make(map[uint64]*Call),
 		heartBeatInterval: defHeatBeatInterval,
 		doneChan:          make(chan struct{}),
-		DialTimeout:       dialTimeout,
+		DialTimeout:       conf.dialTimeout,
 	}
 
 	go client.input()

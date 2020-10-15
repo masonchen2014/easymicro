@@ -27,7 +27,11 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
+	cli, err := client.NewClient(&client.ClientConfig{
+		Network:     "tcp",
+		Address:     ":8972",
+		ServicePath: "Arith",
+	}, client.SetRateLimiter(ratelimit.NewBucketWithQuantum(1*time.Second, 5, 1)))
 
 	if err != nil {
 		panic(err)

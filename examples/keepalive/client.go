@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/masonchen2014/easymicro/client"
 	"github.com/masonchen2014/easymicro/log"
 
 	easyclient "github.com/masonchen2014/easymicro/client"
@@ -22,7 +23,11 @@ type Arith int
 
 func main() {
 	// #1
-	client, err := easyclient.NewClient("tcp", "127.0.0.1:8972", "Arith")
+	client, err := easyclient.NewClient(&client.ClientConfig{
+		Network:     "tcp",
+		Address:     ":8972",
+		ServicePath: "Arith",
+	})
 	if err != nil {
 		log.Error(err)
 		return

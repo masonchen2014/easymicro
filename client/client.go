@@ -13,56 +13,15 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-func NewClient(network, address, servicePath string, opts ...ClientOption) (*Client, error) {
-	client := &Client{
-		servicePath: servicePath,
-		selectMode:  SelectByUser,
-	}
-	for _, opt := range opts {
-		opt(client)
-	}
-	rpcClient, err := NewRPCClient(network, address, servicePath, client.DialTimeout)
-	if err != nil {
-		return nil, err
-	}
-	rpcClient.SetCircuitBreaker(client.breakerConfig)
-	rpcClient.SetRateLimiter(client.limiterConfig)
-	client.defaultRPCClient = rpcClient
-
-	return client, nil
-}
-
-func NewDiscoveryClient(servicePath string, dis discovery.DiscoveryMaster, opts ...ClientOption) (*Client, error) {
-	client := &Client{
-		servicePath:  strings.ToLower(servicePath),
-		selectMode:   RoundRobin,
-		selector:     NewRoundRobinSelector(),
-		cachedClient: make(map[string]*RPCClient),
-		discovery:    dis,
-	}
-
-	if dis == nil {
-		log.Panicf("invalid discovery master")
-	}
-
-	for _, opt := range opts {
-		opt(client)
-	}
-	return client, nil
-}
-
-type LimiterConfig struct {
-	fillInterval time.Duration
-	capacity     int64
-	quantum      int64
-}
-
 type Client struct {
-	//failMode     FailMode
+	network      string
+	address      string
 	selectMode   SelectMode
 	selector     Selector
 	mu           sync.RWMutex
-	cachedClient map[string]*RPCClient
+	cachedClient []*RPCClient
+	// cachedClient map[string]*RPCClient
+	subscriber *discovery.EtcdSubscriber
 
 	defaultRPCClient *RPCClient
 	//	breakers     sync.Map
@@ -71,7 +30,7 @@ type Client struct {
 
 	//	mu sync.RWMutex
 	//	servers map[string]string
-	discovery discovery.DiscoveryMaster
+	// discovery discovery.DiscoveryMaster
 	//	selector  Selector
 
 	isShutdown bool
@@ -89,6 +48,84 @@ type Client struct {
 
 	breakerConfig *gobreaker.Settings
 	limiterConfig *LimiterConfig
+}
+
+type ClientConfig struct {
+	Network     string
+	Address     string
+	ServicePath string
+}
+
+type DiscoverClientConfig struct {
+	Endpoints   []string
+	ServiceName string
+}
+
+type RPCClientConfig struct {
+	network     string
+	address     string
+	servicePath string
+	dialTimeout time.Duration
+}
+
+func NewClient(conf *ClientConfig, opts ...ClientOption) (*Client, error) {
+	c := &Client{
+		servicePath: conf.ServicePath,
+		network:     conf.Network,
+		address:     conf.Address,
+		selectMode:  SelectByUser,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	rpcClient, err := NewRPCClient(&RPCClientConfig{
+		network:     c.network,
+		address:     c.address,
+		servicePath: c.servicePath,
+		dialTimeout: c.DialTimeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rpcClient.SetCircuitBreaker(c.breakerConfig)
+	rpcClient.SetRateLimiter(c.limiterConfig)
+	c.defaultRPCClient = rpcClient
+
+	return c, nil
+}
+
+func NewDiscoveryClient(conf *DiscoverClientConfig, opts ...ClientOption) (*Client, error) {
+	client := &Client{
+		servicePath:  strings.ToLower(conf.ServiceName),
+		selectMode:   RoundRobin,
+		selector:     NewRoundRobinSelector(),
+		cachedClient: []*RPCClient{},
+	}
+
+	sub := discovery.NewEtcdSubscriber(
+		&discovery.EtcdSubscriberConf{
+			Endpoints:   conf.Endpoints,
+			ServiceName: conf.ServiceName,
+			AddNodeFunc: client.addNodeFunc(),
+			DelNodeFunc: client.delNodeFunc(),
+		},
+	)
+
+	client.subscriber = sub
+	if sub == nil {
+		log.Panicf("invalid service subscriber")
+	}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client, nil
+}
+
+type LimiterConfig struct {
+	fillInterval time.Duration
+	capacity     int64
+	quantum      int64
 }
 
 func (c *Client) Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, options ...BeforeOrAfterCallOption) error {
@@ -110,34 +147,65 @@ func (c *Client) Go(ctx context.Context, serviceMethod string, args interface{},
 }
 
 func (c *Client) selectRPCClient() (*RPCClient, error) {
-	if c.discovery == nil {
+	if c.subscriber == nil {
 		return c.defaultRPCClient, nil
 	}
-	var rpcClient *RPCClient
-	nodes := c.discovery.GetAllNodes()
-	if len(nodes) <= 0 {
-		return nil, fmt.Errorf("no avaliable worker nodes")
-	}
-	selectedNode := c.selector.Pick(nodes)
-	if selectedNode == nil {
+	rpcClient := c.selector.Pick(c.cachedClient)
+	if rpcClient == nil {
 		return nil, fmt.Errorf("not avaliable worker node")
 	}
-	c.mu.RLock()
-	rpcClient = c.cachedClient[selectedNode.Addr]
-	c.mu.RUnlock()
-	if rpcClient == nil || rpcClient.status == ConnClose || rpcClient.status == ConnReconnectFail {
-		rCli, err := NewRPCClient(selectedNode.Network, selectedNode.Addr, c.servicePath, c.DialTimeout)
-		if err != nil {
-			return nil, err
-		}
-		rCli.SetCircuitBreaker(c.breakerConfig)
-		rCli.SetRateLimiter(c.limiterConfig)
-		rpcClient = rCli
-		c.mu.Lock()
-		c.cachedClient[selectedNode.Addr] = rpcClient
-		c.mu.Unlock()
-	}
+	log.Debugf("selectRPCClient choose client ***************** %s", rpcClient.address)
 	return rpcClient, nil
+}
+
+func (c *Client) addNodeFunc() func(*discovery.ServiceInfo) error {
+	return func(info *discovery.ServiceInfo) error {
+		newNode := true
+		c.mu.Lock()
+		for _, rCli := range c.cachedClient {
+			if rCli.servicePath == info.Name && rCli.address == info.Addr {
+				newNode = false
+				break
+			}
+		}
+		c.mu.Unlock()
+		if newNode {
+			rCli, err := NewRPCClient(&RPCClientConfig{
+				network:     info.Network,
+				address:     info.Addr,
+				servicePath: info.Name,
+				dialTimeout: c.DialTimeout,
+			})
+			if err != nil {
+				return err
+			}
+			rCli.SetCircuitBreaker(c.breakerConfig)
+			rCli.SetRateLimiter(c.limiterConfig)
+			c.mu.Lock()
+			c.cachedClient = append(c.cachedClient, rCli)
+			log.Infof("addNodeFunc cachedClient %+v", c.cachedClient)
+			c.mu.Unlock()
+		}
+		return nil
+	}
+}
+
+func (c *Client) delNodeFunc() func(*discovery.ServiceInfo) error {
+	return func(info *discovery.ServiceInfo) error {
+		c.mu.Lock()
+		for i, rCli := range c.cachedClient {
+			if rCli.servicePath == info.Name && rCli.address == info.Addr {
+				if len(c.cachedClient) == i+1 {
+					c.cachedClient = c.cachedClient[:i]
+				} else {
+					c.cachedClient = append(c.cachedClient[:i], c.cachedClient[i+1:]...)
+				}
+
+			}
+		}
+		c.mu.Unlock()
+		return nil
+	}
 }
 
 func (c *Client) Close() {

@@ -20,8 +20,6 @@ func SetSelector(mode SelectMode) ClientOption {
 	return func(c *Client) {
 		c.selectMode = mode
 		switch mode {
-		case RandomSelect:
-			c.selector = NewRandomSelector()
 		case RoundRobin:
 			c.selector = NewRoundRobinSelector()
 		default:
