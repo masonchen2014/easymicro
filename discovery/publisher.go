@@ -48,6 +48,7 @@ func (s *EtcdPublisher) Register(info *ServiceInfo) {
 			case <-s.stopCh:
 				log.Infof("etcd discovery revoke for server is closed")
 				s.revoke()
+				s.client.Close()
 				return
 
 			case ka, ok := <-ch:

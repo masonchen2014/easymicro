@@ -27,7 +27,11 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 }
 
 func main() {
-	cli, err := client.NewClient("tcp", ":8972", "Arith", client.SetCircuitBreaker(gobreaker.Settings{
+	cli, err := client.NewClient(&client.ClientConfig{
+		Network:     "tcp",
+		Address:     ":8972",
+		ServicePath: "Arith",
+	}, client.SetCircuitBreaker(&gobreaker.Settings{
 		Name:          "test_circuit",
 		MaxRequests:   5,
 		Timeout:       5 * time.Second,

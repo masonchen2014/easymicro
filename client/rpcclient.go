@@ -533,7 +533,7 @@ func (c *RPCClient) Call(ctx context.Context, serviceMethod string, args interfa
 	if c.bucket != nil {
 		c.bucket.Wait(1)
 	}
-	if c.breaker != nil {
+	if c.breaker != nil && len(serviceMethod) > 0 {
 		_, err := c.breaker.Execute(func() (interface{}, error) {
 			select {
 			case call := <-c.Go(ctx, serviceMethod, args, reply, make(chan *Call, 1), options...).Done:
