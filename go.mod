@@ -38,7 +38,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/fatih/color v1.7.0
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.2
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/btree v1.0.0 // indirect
@@ -53,9 +53,7 @@ require (
 	github.com/julienschmidt/httprouter v1.2.0
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
-	github.com/montanaflynn/stats v0.5.0 // indirect
+	github.com/montanaflynn/stats v0.5.0
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/prometheus/client_golang v1.2.1
@@ -67,10 +65,10 @@ require (
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.3 // indirect
-	go.etcd.io/etcd v3.3.25+incompatible
 	go.uber.org/zap v1.12.0 // indirect
 	golang.org/x/net v0.0.0-20191002035440-2ec189313ef0
 	google.golang.org/grpc v1.24.0
+	sigs.k8s.io/yaml v1.3.0 // indirect
 	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 // indirect
 )
